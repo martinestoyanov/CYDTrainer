@@ -1,0 +1,7 @@
+JavaScript syntax check: PASS
+PASS: serialized duty/FOLLOW POT; unsent duty cancelled
+PASS: incomplete telemetry rejected
+PASS: valid telemetry accepted; malformed numbers and ranges rejected
+PASS: demo rejects late live response and blocks hardware commands
+PASS: uncertain command outcome locks further commands
+ALL LOGIC TESTS PASSED

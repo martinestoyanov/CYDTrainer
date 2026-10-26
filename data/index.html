@@ -1,0 +1,2259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>CYDTrainer J39200 PWM &amp; Air Data Diagnostic</title>
+  <style>
+    :root {
+      --bg-dark: #181a1d;
+      --bg-panel: #22252a;
+      --bg-card: #2a2e35;
+      --border-col: #3a3f48;
+      --text-main: #e4e7ec;
+      --text-muted: #98a1b0;
+      --fluke-yellow: #d99b16;
+      --fluke-bezel: #35383d;
+      --lcd-bg-top: #99a28d;
+      --lcd-bg-bot: #8c9680;
+      --seg-on: #1f251e;
+      --seg-ghost: rgba(31, 37, 30, 0.11);
+      --accent-blue: #3b82f6;
+      --status-ok: #10b981;
+      --status-warn: #f59e0b;
+      --status-err: #ef4444;
+      --status-sim: #a855f7;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.35;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Top Status & Training Notice Bar */
+    .top-bar {
+      background-color: #111315;
+      border-bottom: 1px solid var(--border-col);
+      padding: 6px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-title {
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.4px;
+      color: #fff;
+    }
+
+    .training-notice {
+      font-size: 11px;
+      color: var(--status-warn);
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .telemetry-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .badge-live { background: rgba(16, 185, 129, 0.15); color: var(--status-ok); border: 1px solid rgba(16, 185, 129, 0.4); }
+    .badge-stale { background: rgba(245, 158, 11, 0.18); color: var(--status-warn); border: 1px solid rgba(245, 158, 11, 0.45); }
+    .badge-disc { background: rgba(239, 68, 68, 0.18); color: var(--status-err); border: 1px solid rgba(239, 68, 68, 0.45); }
+    .badge-demo { background: rgba(168, 85, 247, 0.18); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.45); }
+
+    .meta-stat {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .meta-stat span {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .btn-demo-toggle {
+      background: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid var(--border-col);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-demo-toggle.active {
+      background: #581c87;
+      border-color: #a855f7;
+      color: #fff;
+    }
+
+    /* Main Workspace Grid - Designed to fit Landscape iPad (1024x768) without vertical scroll */
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 470px 1fr;
+      gap: 12px;
+      padding: 10px 14px;
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Left Column: Fluke / Kent-Moore J39200 Instrument Head */
+    .meter-column {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .j39200-holster {
+      background: linear-gradient(145deg, #e0a319, #b8820e);
+      padding: 12px;
+      border-radius: 22px;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.55), inset 0 2px 3px rgba(255,255,255,0.3);
+      border: 2px solid #8f6306;
+    }
+
+    .j39200-body {
+      background: linear-gradient(180deg, #3c4046 0%, #2b2e33 100%);
+      border-radius: 14px;
+      padding: 12px 14px 14px;
+      border: 2px solid #1e2024;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.7);
+    }
+
+    .j39200-bezel-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 0 6px 8px;
+      color: #d8dee9;
+    }
+
+    .logo-fluke {
+      font-weight: 900;
+      font-size: 18px;
+      letter-spacing: 1.5px;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .logo-model {
+      font-size: 14px;
+      font-weight: 600;
+      color: #b0b8c4;
+      letter-spacing: 0.6px;
+    }
+
+    .logo-km {
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: 0.8px;
+      border-top: 2px solid #b0b8c4;
+      border-bottom: 2px solid #b0b8c4;
+      padding: 1px 4px;
+    }
+
+    .lcd-bezel {
+      background: #1d2023;
+      padding: 8px;
+      border-radius: 8px;
+      box-shadow: inset 0 3px 8px rgba(0,0,0,0.85), 0 1px 0 rgba(255,255,255,0.12);
+    }
+
+    .lcd-screen {
+      background: linear-gradient(180deg, var(--lcd-bg-top) 0%, var(--lcd-bg-bot) 100%);
+      border-radius: 4px;
+      border: 1px solid #6b7360;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.35);
+      position: relative;
+      width: 100%;
+      aspect-ratio: 440 / 245;
+      overflow: hidden;
+    }
+
+    .lcd-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      user-select: none;
+    }
+
+    /* SVG LCD Segment Classes */
+    .lcd-seg {
+      fill: var(--seg-ghost);
+      transition: none;
+    }
+    .lcd-seg.on {
+      fill: var(--seg-on);
+    }
+
+    .lcd-stroke {
+      stroke: var(--seg-ghost);
+      fill: none;
+      transition: none;
+    }
+    .lcd-stroke.on {
+      stroke: var(--seg-on);
+    }
+
+    .lcd-text {
+      fill: var(--seg-ghost);
+      font-family: Arial, Helvetica, sans-serif;
+      font-weight: 800;
+      transition: none;
+    }
+    .lcd-text.on {
+      fill: var(--seg-on);
+    }
+
+    /* Static etched scale marks on the J39200 LCD glass */
+    .lcd-static-text {
+      fill: var(--seg-on);
+      font-family: Arial, Helvetica, sans-serif;
+      font-weight: 700;
+    }
+    .lcd-static-line {
+      stroke: var(--seg-on);
+      stroke-linecap: butt;
+    }
+
+    /* LCD Bottom Context Strip (Outside LCD glass, inside bezel) */
+    .lcd-meta-strip {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 7px;
+      padding: 4px 8px;
+      background: #17191c;
+      border-radius: 4px;
+      border: 1px solid #2e3238;
+      font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .lcd-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .lcd-meta-label {
+      color: var(--text-muted);
+    }
+
+    .lcd-meta-val {
+      color: #e2e8f0;
+      font-weight: 700;
+    }
+
+    /* Distinct App Instrument Controls inside Meter Frame */
+    .instrument-controls {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-group-row {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .control-group-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #9ca3af;
+      letter-spacing: 0.5px;
+    }
+
+    .segmented-btns {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .meter-btn {
+      background: #1f2227;
+      color: #d1d5db;
+      border: 1px solid #4b5563;
+      border-radius: 16px;
+      padding: 6px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      cursor: pointer;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+
+    .meter-btn:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .meter-btn.active {
+      background: #3b82f6;
+      border-color: #60a5fa;
+      color: #ffffff;
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.45);
+    }
+
+    .meter-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .range-config-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-top: 4px;
+      border-top: 1px solid #3c4149;
+      font-size: 11px;
+      color: #b0b8c4;
+    }
+
+    .range-select-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .range-select {
+      background: #181a1e;
+      color: #e5e7eb;
+      border: 1px solid #4b5563;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* Right Column: Diagnostic Cards */
+    .diag-column {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-col);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--border-col);
+    }
+
+    .card-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #f3f4f6;
+    }
+
+    .card-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Three-Source Comparison Grid */
+    .sources-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    @media (max-width: 640px) {
+      .sources-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .source-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-col);
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .source-box.active-focus {
+      border-color: var(--accent-blue);
+      box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.35);
+    }
+
+    .source-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+    }
+
+    .source-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #d1d5db;
+    }
+
+    .prov-pill {
+      font-size: 9px;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      white-space: nowrap;
+    }
+
+    .prov-cmd { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.4); }
+    .prov-ok { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .prov-calc { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.45); }
+    .prov-err { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.45); }
+
+    .source-primary-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      margin: 2px 0;
+    }
+
+    .source-detail-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .source-detail-row strong {
+      color: var(--text-main);
+    }
+
+    .source-note {
+      font-size: 10px;
+      color: #9ca3af;
+      margin-top: 2px;
+      line-height: 1.25;
+    }
+
+    /* Comparison Deltas Strip */
+    .deltas-strip {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border-col);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    @media (max-width: 640px) {
+      .deltas-strip {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .delta-item {
+      background: #1b1e23;
+      padding: 5px 8px;
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .delta-label {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    .delta-val {
+      font-weight: 700;
+      color: #e5e7eb;
+    }
+
+    .v-bounds-bar {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: #1b1e23;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .v-bounds-inputs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .v-bounds-inputs label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .input-mini {
+      width: 54px;
+      background: #111317;
+      border: 1px solid var(--border-col);
+      color: #fff;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 11px;
+    }
+
+    /* Manual PWM & Potentiometer Control Panel */
+    .pwm-controls-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .pwm-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .btn-follow-pot {
+      background: #065f46;
+      color: #ecfdf5;
+      border: 1px solid #10b981;
+      padding: 5px 12px;
+      border-radius: 5px;
+      font-weight: 700;
+      font-size: 11px;
+      cursor: pointer;
+      letter-spacing: 0.4px;
+    }
+
+    .btn-follow-pot.pot-active {
+      background: #10b981;
+      color: #052e16;
+    }
+
+    .btn-follow-pot:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .slider-control-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .duty-slider {
+      width: 100%;
+      height: 6px;
+      accent-color: var(--accent-blue);
+      cursor: pointer;
+    }
+
+    .duty-num-input {
+      width: 72px;
+      background: #141619;
+      border: 1px solid var(--border-col);
+      color: #fff;
+      padding: 5px 7px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .btn-action {
+      background: var(--accent-blue);
+      color: #fff;
+      border: 1px solid #60a5fa;
+      padding: 5px 11px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .btn-action:disabled,
+    .duty-slider:disabled,
+    .duty-num-input:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .preset-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .preset-btns {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .btn-preset {
+      background: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid var(--border-col);
+      padding: 3px 9px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      cursor: pointer;
+    }
+
+    .btn-preset:hover:not(:disabled) {
+      border-color: #60a5fa;
+    }
+
+    .btn-preset:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* Secondary Air Data Panel (Tabular, Non-EICAS) */
+    .airdata-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    @media (max-width: 640px) {
+      .airdata-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .air-cell {
+      background: var(--bg-card);
+      border: 1px solid var(--border-col);
+      padding: 5px 8px;
+      border-radius: 4px;
+    }
+
+    .air-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .air-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: #f3f4f6;
+    }
+
+    .zero-bar {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-col);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .zero-confirm-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #d1d5db;
+      cursor: pointer;
+    }
+
+    .btn-zero {
+      background: #b45309;
+      color: #fff;
+      border: 1px solid #f59e0b;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-zero:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Opt-In Demo Mode Scenario Bar */
+    .demo-drawer {
+      background: #2e1065;
+      border-bottom: 1px solid #7e22ce;
+      padding: 6px 14px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    .demo-drawer.visible {
+      display: flex;
+    }
+
+    .demo-presets {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .btn-demo-scen {
+      background: #4c1d95;
+      color: #f3e8ff;
+      border: 1px solid #a855f7;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-demo-scen.active {
+      background: #a855f7;
+      color: #1e1b4b;
+      font-weight: 800;
+    }
+    button, select, input[type="number"] { min-height: 36px; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid #93c5fd; outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Status & Safety Notice Bar -->
+  <header class="top-bar">
+    <div class="brand-group">
+      <span class="brand-title">CYDTrainer J39200 PWM Diagnostic</span>
+      <span class="training-notice">Training aid. Not a calibrated instrument or approved aircraft-maintenance test substitute.</span>
+    </div>
+
+    <div class="telemetry-bar">
+      <div id="conn-badge" class="badge badge-disc">
+        <span class="badge-dot"></span>
+        <span id="conn-text">DISCONNECTED</span>
+      </div>
+      <div class="meta-stat">SEQ: <span id="meta-seq">---</span></div>
+      <div class="meta-stat">UPTIME: <span id="meta-uptime">---</span></div>
+      <div class="meta-stat">AGE: <span id="meta-age">---</span></div>
+      <button type="button" id="btn-toggle-demo" class="btn-demo-toggle">OPT-IN DEMO MODE: OFF</button>
+    </div>
+  </header>
+
+  <!-- Opt-In Demo Simulator Bar (Hidden during Live Operation) -->
+  <section id="demo-drawer" class="demo-drawer">
+    <div>
+      <strong>OPT-IN UI EVALUATION DEMO ACTIVE</strong> — Live hardware polling and `/pwm` or `/zero` network commands are disabled.
+    </div>
+    <div class="demo-presets">
+      <span>Scenario:</span>
+      <button type="button" class="btn-demo-scen active" data-scen="50_calc">50% Duty (Calc V)</button>
+      <button type="button" class="btn-demo-scen" data-scen="50_adc">50% Duty (ADC Measured V)</button>
+      <button type="button" class="btn-demo-scen" data-scen="0_dc">0% Duty (No Edges / DC)</button>
+      <button type="button" class="btn-demo-scen" data-scen="100_dc">100% Duty (No Edges / DC)</button>
+      <button type="button" class="btn-demo-scen" data-scen="live_air">Live Air Data Ready</button>
+      <button type="button" class="btn-demo-scen" data-scen="freeze_seq">Freeze Sequence (Stale Test)</button>
+    </div>
+  </section>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+
+    <!-- Left Column: Fluke / Kent-Moore J39200 Instrument Head -->
+    <section class="meter-column">
+      <div class="j39200-holster">
+        <div class="j39200-body">
+          <div class="j39200-bezel-header">
+            <span class="logo-fluke">FLUKE</span>
+            <span class="logo-model">J39200</span>
+            <span class="logo-km">KENT-MOORE</span>
+          </div>
+
+          <div class="lcd-bezel">
+            <div class="lcd-screen">
+              <svg id="j39200-svg" class="lcd-svg" viewBox="0 0 440 245" aria-label="J39200 Segmented LCD Display">
+                <!-- Top Annunciator Row -->
+                <text id="ann-AUTO" x="14" y="25" font-size="13.5" class="lcd-text">AUTO</text>
+                <text id="ann-100ms" x="62" y="25" font-size="13.5" class="lcd-text">100ms</text>
+                <text id="ann-RECORD" x="114" y="25" font-size="13.5" class="lcd-text">RECORD</text>
+                <text id="ann-MAX" x="183" y="25" font-size="13.5" class="lcd-text">MAX</text>
+                <text id="ann-MIN" x="224" y="25" font-size="13.5" class="lcd-text">MIN</text>
+                <text id="ann-AVG" x="260" y="25" font-size="13.5" class="lcd-text">AVG</text>
+
+                <!-- Boxed H (Hold/Stale Indicator) -->
+                <g id="ann-H-group">
+                  <rect id="ann-H-box" x="299" y="11" width="17" height="17" rx="1.5" class="lcd-seg"/>
+                  <text x="303.5" y="24.5" font-size="13" font-family="Arial, sans-serif" font-weight="900" fill="var(--lcd-bg-top)">H</text>
+                </g>
+
+                <text id="ann-AC" x="326" y="25" font-size="14" class="lcd-text">AC</text>
+                <text id="ann-DC" x="353" y="25" font-size="14" class="lcd-text">DC</text>
+
+                <!-- Left Symbol Column -->
+                <!-- Battery Outline -->
+                <g id="ann-BATT">
+                  <rect id="ann-BATT-body" x="15" y="42" width="24" height="13" stroke-width="2" class="lcd-stroke"/>
+                  <rect id="ann-BATT-nub" x="39" y="45.5" width="3" height="6" class="lcd-seg"/>
+                  <text id="ann-BATT-minus" x="18" y="52.5" font-size="11" class="lcd-text">-</text>
+                  <text id="ann-BATT-plus" x="29" y="52.5" font-size="10" class="lcd-text">+</text>
+                </g>
+
+                <!-- Main Negative Sign -->
+                <polygon id="seg-minus" points="14,83 37,83 37,93 14,93" class="lcd-seg"/>
+
+                <!-- Continuity Beeper Waves -->
+                <g id="ann-BEEP">
+                  <path id="ann-BEEP-1" d="M18,113 Q21,118 18,123" stroke-width="2" stroke-linecap="round" class="lcd-stroke"/>
+                  <path id="ann-BEEP-2" d="M23,111 Q27,118 23,125" stroke-width="2" stroke-linecap="round" class="lcd-stroke"/>
+                  <path id="ann-BEEP-3" d="M28,109 Q33,118 28,127" stroke-width="2" stroke-linecap="round" class="lcd-stroke"/>
+                  <path id="ann-BEEP-4" d="M33,107 Q39,118 33,129" stroke-width="2" stroke-linecap="round" class="lcd-stroke"/>
+                </g>
+
+                <!-- % Delta -->
+                <text id="ann-PCT-DELTA" x="12" y="149" font-size="16" class="lcd-text">%&#916;</text>
+
+                <!-- Right Units & Mode Annunciators -->
+                <text id="ann-DUTY" x="334" y="47" font-size="15.5" class="lcd-text">DUTY</text>
+
+                <text id="ann-u" x="323" y="76" font-size="15.5" class="lcd-text">&#956;</text>
+                <text id="ann-m" x="336" y="76" font-size="15.5" class="lcd-text">m</text>
+                <text id="ann-V" x="353" y="76" font-size="16.5" class="lcd-text">V</text>
+                <text id="ann-A" x="368" y="76" font-size="16.5" class="lcd-text">A</text>
+
+                <text id="ann-n" x="320" y="102" font-size="15.5" class="lcd-text">n</text>
+                <text id="ann-F" x="335" y="102" font-size="15.5" class="lcd-text">F</text>
+                <text id="ann-S" x="349" y="102" font-size="15.5" class="lcd-text">S</text>
+                <text id="ann-PCT" x="364" y="102" font-size="16.5" class="lcd-text">%</text>
+
+                <text id="ann-M" x="314" y="128" font-size="15.5" class="lcd-text">M</text>
+                <text id="ann-k" x="331" y="128" font-size="15.5" class="lcd-text">k</text>
+                <text id="ann-OHM" x="344" y="128" font-size="15.5" class="lcd-text">&#937;</text>
+                <text id="ann-Hz" x="361" y="128" font-size="16" class="lcd-text">Hz</text>
+
+                <!-- Dynamic Main Digits Container (Populated by JS) -->
+                <g id="lcd-digits-layer"></g>
+
+                <!-- Bar Graph Polarity & Light Symbols -->
+                <text id="ann-BAR-PLUS" x="23" y="176" font-size="16" class="lcd-text">+</text>
+                <rect id="ann-BAR-MINUS" x="24" y="181" width="10" height="2.4" class="lcd-seg"/>
+
+                <!-- Sun/Backlight Icon -->
+                <g id="ann-SUN" transform="translate(29, 198)">
+                  <circle cx="0" cy="0" r="3.5" stroke-width="1.5" class="lcd-stroke"/>
+                  <line x1="0" y1="-8" x2="0" y2="-5" stroke-width="1.5" class="lcd-stroke"/>
+                  <line x1="0" y1="5" x2="0" y2="8" stroke-width="1.5" class="lcd-stroke"/>
+                  <line x1="-8" y1="0" x2="-5" y2="0" stroke-width="1.5" class="lcd-stroke"/>
+                  <line x1="5" y1="0" x2="8" y2="0" stroke-width="1.5" class="lcd-stroke"/>
+                  <line x1="-5.5" y1="-5.5" x2="-3.5" y2="-3.5" stroke-width="1.5" class="lcd-stroke"/>
+                  <line x1="3.5" y1="3.5" x2="5.5" y2="5.5" stroke-width="1.5" class="lcd-stroke"/>
+                  <line x1="5.5" y1="-5.5" x2="3.5" y2="-3.5" stroke-width="1.5" class="lcd-stroke"/>
+                  <line x1="-3.5" y1="3.5" x2="-5.5" y2="5.5" stroke-width="1.5" class="lcd-stroke"/>
+                </g>
+
+                <!-- Dynamic 0-9 Scale Ticks & 40-Segment Bar Graph Container (Populated by JS) -->
+                <g id="lcd-bargraph-layer"></g>
+
+                <!-- Right Side Bar Graph Range & Overrange Indicators -->
+                <text id="ann-4000" x="369" y="191" font-size="11.5" class="lcd-text">4000</text>
+                <text id="ann-mV-bot" x="369" y="206" font-size="11.5" class="lcd-text">mV</text>
+                <!-- Overrange Right Arrow Pointer -->
+                <polygon id="bar-overrange" points="365,213 377,219.5 365,226" class="lcd-seg"/>
+              </svg>
+            </div>
+
+            <!-- Explicit Provenance & Bar Range Readout Strip directly beneath LCD -->
+            <div class="lcd-meta-strip">
+              <div class="lcd-meta-item">
+                <span class="lcd-meta-label">LCD SOURCE:</span>
+                <span id="lcd-source-desc" class="lcd-meta-val">CAPTURED CONTROL-PIN</span>
+              </div>
+              <div class="lcd-meta-item">
+                <span class="lcd-meta-label">BAR SCALE (0–9·0):</span>
+                <span id="lcd-bar-scale-desc" class="lcd-meta-val">0 – 100.0 %</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Distinct App Mode & Source Selection Buttons -->
+          <div class="instrument-controls">
+            <div class="control-group-row">
+              <span class="control-group-label">LCD Mode</span>
+              <div class="segmented-btns">
+                <button type="button" class="meter-btn active" data-mode="duty">DUTY (%)</button>
+                <button type="button" class="meter-btn" data-mode="hz">FREQ (Hz)</button>
+                <button type="button" class="meter-btn" data-mode="v">AVG (DC V)</button>
+              </div>
+            </div>
+
+            <div class="control-group-row">
+              <span class="control-group-label">Primary Src</span>
+              <div class="segmented-btns">
+                <button type="button" id="src-btn-captured" class="meter-btn active" data-src="captured">CAPTURED PIN</button>
+                <button type="button" id="src-btn-commanded" class="meter-btn" data-src="commanded">COMMANDED</button>
+                <button type="button" id="src-btn-analog" class="meter-btn" data-src="analog">ANALOG / CALC</button>
+              </div>
+            </div>
+
+            <div class="range-config-bar">
+              <div class="range-select-group">
+                <label for="sel-v-range">DC V Bar Range:</label>
+                <select id="sel-v-range" class="range-select">
+                  <option value="5" selected>0 – 5.0 V</option>
+                  <option value="4">0 – 4.0 V (4000 mV)</option>
+                  <option value="10">0 – 10.0 V</option>
+                  <option value="15">0 – 15.0 V</option>
+                </select>
+              </div>
+              <div class="range-select-group">
+                <label for="sel-hz-range">Hz Bar Range:</label>
+                <select id="sel-hz-range" class="range-select">
+                  <option value="10000" selected>0 – 10 kHz</option>
+                  <option value="5000">0 – 5 kHz</option>
+                  <option value="20000">0 – 20 kHz</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Three-Source Provenance, PWM Controls & Air Data -->
+    <section class="diag-column">
+
+      <!-- Card 1: Three-Source Comparison & Provenance -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Three-Source PWM Diagnostic Comparison</span>
+          <span class="card-subtitle">Commanded Target vs. GPIO16 Control-Pin vs. Analog/Fallback</span>
+        </div>
+
+        <div class="sources-grid">
+          <!-- Source A: Commanded Target -->
+          <div id="box-src-commanded" class="source-box">
+            <div class="source-top">
+              <span class="source-title">A. Commanded Output</span>
+              <span id="pill-cmd-src" class="prov-pill prov-cmd">POT KNOB</span>
+            </div>
+            <div id="val-cmd-duty" class="source-primary-val">--- %</div>
+            <div class="source-detail-row">
+              <span>Configured Freq:</span>
+              <strong>5000 Hz (Fixed)</strong>
+            </div>
+            <div class="source-detail-row">
+              <span>Expected Vavg:</span>
+              <strong id="val-cmd-vexp">--- V</strong>
+            </div>
+            <div class="source-note">
+              Target from <code>pwm_set</code>. Firmware nonlinear pot curve &amp; deadband already applied.
+            </div>
+          </div>
+
+          <!-- Source B: Captured Control-Pin Timing -->
+          <div id="box-src-captured" class="source-box active-focus">
+            <div class="source-top">
+              <span class="source-title">B. Captured Control-Pin</span>
+              <span id="pill-cap-status" class="prov-pill prov-ok">MCPWM GPIO16</span>
+            </div>
+            <div id="val-cap-duty" class="source-primary-val">--- %</div>
+            <div class="source-detail-row">
+              <span>Captured Freq:</span>
+              <strong id="val-cap-hz">--- Hz</strong>
+            </div>
+            <div class="source-detail-row">
+              <span>Expected Vavg:</span>
+              <strong id="val-cap-vexp">--- V</strong>
+            </div>
+            <div class="source-note">
+              Captured control-pin timing on GPIO16 (inversion compensated). Not verified J2 B terminal output.
+            </div>
+          </div>
+
+          <!-- Source C: Analog Average / Calculated Fallback -->
+          <div id="box-src-analog" class="source-box">
+            <div class="source-top">
+              <span class="source-title">C. Analog / Fallback</span>
+              <span id="pill-ana-status" class="prov-pill prov-err">UNAVAILABLE</span>
+            </div>
+            <div id="val-ana-v" class="source-primary-val">--- V</div>
+            <div class="source-detail-row">
+              <span>Voltage-Derived Duty:</span>
+              <strong id="val-ana-est-duty">--- %</strong>
+            </div>
+            <div class="source-detail-row">
+              <span>ADC Status Flag:</span>
+              <strong id="val-ana-flags">---</strong>
+            </div>
+            <div class="source-note">
+              <code>D_voltage</code> is a voltage-derived estimate from Vlow/Vhigh bounds, not internal J39200 algorithm.
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Deltas Strip -->
+        <div class="deltas-strip">
+          <div class="delta-item">
+            <span class="delta-label">&#916; Duty (Cap &minus; Cmd):</span>
+            <span id="delta-cap-cmd" class="delta-val">---</span>
+          </div>
+          <div class="delta-item">
+            <span class="delta-label">&#916; Duty (V-Est &minus; Cap):</span>
+            <span id="delta-vest-cap" class="delta-val">---</span>
+          </div>
+          <div class="delta-item">
+            <span class="delta-label">&#916; Voltage (Fluke &minus; Vexp):</span>
+            <span id="delta-v-vexp" class="delta-val">---</span>
+          </div>
+        </div>
+
+        <!-- Terminal Voltage Estimates (Tuning Bounds) -->
+        <div class="v-bounds-bar">
+          <span>Expected Terminal Waveform Tuning Estimates (Unverified): <code>V_exp = V_low + d(V_high - V_low)</code></span>
+          <div class="v-bounds-inputs">
+            <label>V_low (V): <input type="number" id="inp-vlow" class="input-mini" value="0.50" step="0.05" min="0" max="5"></label>
+            <label>V_high (V): <input type="number" id="inp-vhigh" class="input-mini" value="3.60" step="0.05" min="0.5" max="15"></label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: PWM Output Control & Potentiometer Handover -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">PWM Generator Control &amp; Potentiometer Override</span>
+          <span class="card-subtitle">Routes: <code>GET /pwm?duty=X</code> &amp; <code>GET /pwm?src=pot</code></span>
+        </div>
+
+        <div class="pwm-controls-layout">
+          <div class="pwm-status-row">
+            <div>
+              Active Control Authority: <strong id="ctrl-auth-text">AWAITING TELEMETRY</strong>
+              <span style="margin-left:10px; color:var(--text-muted);">Filtered Potentiometer (<code>pot_v</code>): <strong id="val-pot-v" style="color:#fff;">--- V</strong></span>
+            </div>
+            <button type="button" id="btn-follow-pot" class="btn-follow-pot" disabled>FOLLOW POT (RETURN TO KNOB)</button>
+          </div>
+
+          <div class="slider-control-row">
+            <input type="range" id="slider-duty" class="duty-slider" min="0" max="100" step="0.1" value="50.0" disabled>
+            <input type="number" id="input-duty" class="duty-num-input" min="0" max="100" step="0.1" value="50.0" disabled>
+            <button type="button" id="btn-set-duty" class="btn-action" disabled>SET DUTY %</button>
+          </div>
+
+          <div class="preset-row">
+            <div class="preset-btns">
+              <button type="button" class="btn-preset" data-preset="0" disabled>0.0%</button>
+              <button type="button" class="btn-preset" data-preset="10" disabled>10.0%</button>
+              <button type="button" class="btn-preset" data-preset="25" disabled>25.0%</button>
+              <button type="button" class="btn-preset" data-preset="50" disabled>50.0%</button>
+              <button type="button" class="btn-preset" data-preset="75" disabled>75.0%</button>
+              <button type="button" class="btn-preset" data-preset="90" disabled>90.0%</button>
+              <button type="button" class="btn-preset" data-preset="100" disabled>100.0%</button>
+            </div>
+            <span id="cmd-flight-status" class="card-subtitle">Ready</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Secondary Air Data Panel (Tabular Diagnostic View) -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Secondary Air Data &amp; Pitot-Static Telemetry</span>
+          <span id="pill-air-status" class="prov-pill prov-err">NO TELEMETRY</span>
+        </div>
+
+        <div class="airdata-grid">
+          <div class="air-cell">
+            <div class="air-label">Indicated Airspeed</div>
+            <div id="air-ias" class="air-val">--- kt</div>
+          </div>
+          <div class="air-cell">
+            <div class="air-label">Pressure Altitude</div>
+            <div id="air-alt" class="air-val">--- ft</div>
+          </div>
+          <div class="air-cell">
+            <div class="air-label">Impact Pressure (Qc)</div>
+            <div id="air-qc" class="air-val">--- kPa</div>
+          </div>
+          <div class="air-cell">
+            <div class="air-label">5V Sensor Rail</div>
+            <div id="air-rail-v" class="air-val">--- V</div>
+          </div>
+          <div class="air-cell">
+            <div class="air-label">Pitot Pressure</div>
+            <div id="air-pitot-kpa" class="air-val">--- kPa</div>
+          </div>
+          <div class="air-cell">
+            <div class="air-label">Static Pressure</div>
+            <div id="air-static-kpa" class="air-val">--- kPa</div>
+          </div>
+          <div class="air-cell">
+            <div class="air-label">Pitot ADC Voltage</div>
+            <div id="air-pitot-v" class="air-val">--- V</div>
+          </div>
+          <div class="air-cell">
+            <div class="air-label">Static ADC Voltage</div>
+            <div id="air-static-v" class="air-val">--- V</div>
+          </div>
+        </div>
+
+        <div class="zero-bar">
+          <label class="zero-confirm-label">
+            <input type="checkbox" id="chk-zero-ambient" disabled>
+            <span>Confirm both pitot and static ports are open to ambient pressure</span>
+          </label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="zero-result-msg" class="card-subtitle"></span>
+            <button type="button" id="btn-zero-sensors" class="btn-zero" disabled>ZERO PITOT/STATIC (/zero)</button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      /* =========================================================================
+       * 1. BUILD EMBEDDED J39200 SEGMENTED LCD GEOMETRY
+       * ========================================================================= */
+      const digitsLayer = document.getElementById("lcd-digits-layer");
+      const barLayer = document.getElementById("lcd-bargraph-layer");
+
+      // 4 Full 7-Segment Digits (Indices 1..4) + Left Leading '1' (Index 0)
+      // Positioned to match the Fluke J39200 4-1/2 digit window and allow 100.0 and 5000
+      const fullDigitX = [90, 145, 200, 255];
+
+      // Build Digit 0 (Leading '1' with segments B and C)
+      const d0Group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      d0Group.setAttribute("transform", "translate(52, 42)");
+      d0Group.innerHTML = `
+        <polygon id="d0-b" class="lcd-seg" points="16,4 23,10 20,44 14,48 10,44 13,10"/>
+        <polygon id="d0-c" class="lcd-seg" points="14,52 20,56 17,90 10,96 7,90 10,56"/>
+      `;
+      digitsLayer.appendChild(d0Group);
+
+      // Standard bevelled 7-segment polygons (width 42, height 100, slight 3-deg slant)
+      const segPolygons = {
+        a: "9,2 37,2 41,7 34,13 13,13 6,7",
+        b: "38,4 44,9 41,45 35,49 30,45 33,13",
+        c: "35,51 40,55 37,91 31,96 26,90 29,55",
+        d: "9,87 30,87 35,93 29,98 4,98 0,93",
+        e: "4,51 10,55 7,89 1,94 -3,89 0,55",
+        f: "7,4 13,12 10,45 4,49 -1,45 2,9",
+        g: "7,46 33,46 37,50 32,54 6,54 2,50"
+      };
+
+      fullDigitX.forEach((dx, idx) => {
+        const dIndex = idx + 1;
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.setAttribute("transform", `translate(${dx}, 42)`);
+        let inner = "";
+        for (const [sKey, pts] of Object.entries(segPolygons)) {
+          inner += `<polygon id="d${dIndex}-${sKey}" class="lcd-seg" points="${pts}"/>`;
+        }
+        g.innerHTML = inner;
+        digitsLayer.appendChild(g);
+
+        // Decimal points between digits 1-2, 2-3, 3-4
+        if (dIndex < 4) {
+          const dp = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+          const dpX = dx + 43;
+          dp.setAttribute("id", `dp-${dIndex}`);
+          dp.setAttribute("class", "lcd-seg");
+          dp.setAttribute("points", `${dpX},131 ${dpX + 7},131 ${dpX + 6},141 ${dpX - 1},141`);
+          digitsLayer.appendChild(dp);
+        }
+      });
+
+      // Build 0–9–0 Bar Graph Scale & 40 Pointer-Topped Segments
+      const barStartX = 46;
+      const barStep = 7.8; // 40 segments across 312px
+      let barSvgHtml = "";
+
+      // 41 scale ticks (0 through 40) with major ticks every 4 units (labeled 0 1 2 3 4 5 6 7 8 9 0)
+      for (let i = 0; i <= 40; i++) {
+        const tx = (barStartX + i * barStep).toFixed(1);
+        const isMajor = (i % 4 === 0);
+        const yTop = isMajor ? 176 : 181;
+        const strokeW = isMajor ? 1.8 : 1.1;
+        barSvgHtml += `<line x1="${tx}" y1="${yTop}" x2="${tx}" y2="187" stroke-width="${strokeW}" class="lcd-static-line"/>`;
+
+        if (isMajor) {
+          const labelNum = (i === 40) ? "0" : String(i / 4);
+          barSvgHtml += `<text x="${tx}" y="172" font-size="11.5" text-anchor="middle" class="lcd-static-text">${labelNum}</text>`;
+        }
+      }
+
+      // 40 Active Bar Graph Segments (Indices 1..40) with pointed tops matching J39200 LCD
+      for (let s = 1; s <= 40; s++) {
+        const sx = (barStartX + (s - 1) * barStep + 1.2).toFixed(1);
+        const sw = 5.4;
+        const midX = (parseFloat(sx) + sw / 2).toFixed(1);
+        const rightX = (parseFloat(sx) + sw).toFixed(1);
+        // Pointed top at y=191, shoulders at y=195, base at y=214
+        barSvgHtml += `<polygon id="bar-seg-${s}" class="lcd-seg" points="${sx},214 ${sx},195 ${midX},191 ${rightX},195 ${rightX},214"/>`;
+      }
+      barLayer.innerHTML = barSvgHtml;
+
+      /* =========================================================================
+       * 2. SEGMENT CHARACTER MAP & DIFFERENTIAL DOM RENDERER
+       * ========================================================================= */
+      const CHAR_MAP = {
+        " ": [],
+        "0": ["a", "b", "c", "d", "e", "f"],
+        "1": ["b", "c"],
+        "2": ["a", "b", "d", "e", "g"],
+        "3": ["a", "b", "c", "d", "g"],
+        "4": ["b", "c", "f", "g"],
+        "5": ["a", "c", "d", "f", "g"],
+        "6": ["a", "c", "d", "e", "f", "g"],
+        "7": ["a", "b", "c"],
+        "8": ["a", "b", "c", "d", "e", "f", "g"],
+        "9": ["a", "b", "c", "d", "f", "g"],
+        "-": ["g"],
+        "d": ["b", "c", "d", "e", "g"],
+        "c": ["d", "e", "g"],
+        "C": ["a", "d", "e", "f"],
+        "O": ["a", "b", "c", "d", "e", "f"],
+        "L": ["d", "e", "f"],
+        "E": ["a", "d", "e", "f", "g"],
+        "r": ["e", "g"]
+      };
+
+      const domCache = new Map();
+
+      function setElemClassOn(id, isOn) {
+        const prev = domCache.get(id);
+        if (prev === isOn) return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (isOn) {
+          el.classList.add("on");
+        } else {
+          el.classList.remove("on");
+        }
+        domCache.set(id, isOn);
+      }
+
+      function setTextContentCached(id, text) {
+        const key = "txt:" + id;
+        if (domCache.get(key) === text) return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = text;
+        domCache.set(key, text);
+      }
+
+      function renderLCDMainDigits(leadOne, chars4, dpIndex, minusOn) {
+        setElemClassOn("seg-minus", Boolean(minusOn));
+        setElemClassOn("d0-b", Boolean(leadOne));
+        setElemClassOn("d0-c", Boolean(leadOne));
+
+        for (let i = 1; i <= 4; i++) {
+          const ch = chars4[i - 1] || " ";
+          const activeSegs = CHAR_MAP[ch] || [];
+          ["a", "b", "c", "d", "e", "f", "g"].forEach((s) => {
+            setElemClassOn(`d${i}-${s}`, activeSegs.includes(s));
+          });
+        }
+
+        for (let dp = 1; dp <= 3; dp++) {
+          setElemClassOn(`dp-${dp}`, dpIndex === dp);
+        }
+      }
+
+      function formatValueForLCD(val, decimals, maxVal) {
+        if (val === null || val === undefined || Number.isNaN(val)) {
+          return { leadOne: false, chars: ["-", "-", "-", "-"], dp: 0, minus: false, overflow: false };
+        }
+        const minus = val < 0;
+        const absVal = Math.abs(val);
+
+        if (absVal > maxVal) {
+          return { leadOne: false, chars: [" ", "O", "L", " "], dp: 0, minus: minus, overflow: true };
+        }
+
+        const fixedStr = absVal.toFixed(decimals);
+        const dotPos = fixedStr.indexOf(".");
+        const cleanDigits = fixedStr.replace(".", "");
+
+        let leadOne = false;
+        let fourChars = [" ", " ", " ", " "];
+        let dpLocation = 0;
+
+        if (cleanDigits.length === 5 && cleanDigits[0] === "1") {
+          // e.g., 1000.0 or 100.00 -> uses leading 1
+          leadOne = true;
+          fourChars = cleanDigits.slice(1).split("");
+          if (dotPos > 0) dpLocation = dotPos - 1;
+        } else if (cleanDigits.length <= 4) {
+          const padLen = 4 - cleanDigits.length;
+          const padded = " ".repeat(padLen) + cleanDigits;
+          fourChars = padded.split("");
+          if (dotPos > 0) {
+            dpLocation = dotPos + padLen;
+          }
+        } else {
+          return { leadOne: false, chars: [" ", "O", "L", " "], dp: 0, minus: minus, overflow: true };
+        }
+
+        return {
+          leadOne: leadOne,
+          chars: fourChars,
+          dp: dpLocation,
+          minus: minus,
+          overflow: false
+        };
+      }
+
+      function renderBarGraph(value, maxRange, isInvalid) {
+        if (isInvalid || value === null || value === undefined || Number.isNaN(value)) {
+          setElemClassOn("ann-BAR-PLUS", false);
+          setElemClassOn("ann-BAR-MINUS", false);
+          setElemClassOn("bar-overrange", false);
+          for (let s = 1; s <= 40; s++) {
+            setElemClassOn(`bar-seg-${s}`, false);
+          }
+          return;
+        }
+
+        setElemClassOn("ann-BAR-PLUS", value >= 0);
+        setElemClassOn("ann-BAR-MINUS", value < 0);
+
+        const absVal = Math.abs(value);
+        const isOver = absVal > maxRange;
+        setElemClassOn("bar-overrange", isOver);
+
+        const ratio = maxRange > 0 ? Math.min(1, Math.max(0, absVal / maxRange)) : 0;
+        const litCount = Math.round(ratio * 40);
+
+        for (let s = 1; s <= 40; s++) {
+          setElemClassOn(`bar-seg-${s}`, s <= litCount);
+        }
+      }
+
+      /* =========================================================================
+       * 3. APPLICATION STATE & PROVENANCE CALCULATIONS
+       * ========================================================================= */
+      const state = {
+        mode: "duty",          // 'duty' | 'hz' | 'v'
+        source: "captured",    // 'captured' | 'commanded' | 'analog'
+        vBarRange: 5.0,
+        hzBarRange: 10000,
+        vLow: 0.50,
+        vHigh: 3.60,
+
+        // Connection & Polling state
+        demoMode: false,
+        demoScenario: "50_calc",
+        connState: "DISCONNECTED", // 'LIVE' | 'STALE' | 'DISCONNECTED' | 'DEMO'
+        lastTelemetry: null,
+        lastSeq: null,
+        lastSeqAdvanceTime: 0,
+        lastPacketTime: 0,
+        pollInFlight: false,
+        consecutiveErrors: 0,
+        pollTimerId: null,
+
+        // Command Serialization & Throttling state
+        cmdInFlight: false,
+        queuedDuty: null,
+        sliderThrottleTimer: null,
+        userDraggingSlider: false,
+
+        // rAF coordination
+        needsRender: true
+      };
+
+      // CYDTrainer hardening: validate packets before updating the live UI.
+      const numericFields = ["seq", "t", "pwm_set", "pwm_duty", "pwm_hz", "pot_v",
+        "fluke_v", "pitot_v", "static_v", "rail_v", "pitot_kpa", "static_kpa",
+        "qc_kpa", "ias_kt", "alt_ft"];
+      const booleanFields = ["pwm_manual", "pwm_avg_sim", "adc_fluke_ok",
+        "sensors_sim", "adc_sensors_ok"];
+      function validateTelemetry(packet) {
+        if (!packet || typeof packet !== "object" || Array.isArray(packet)) {
+          throw new Error("Invalid telemetry object");
+        }
+        for (const key of numericFields) {
+          if (typeof packet[key] !== "number" || !Number.isFinite(packet[key])) {
+            throw new Error("Invalid telemetry field: " + key);
+          }
+        }
+        for (const key of booleanFields) {
+          if (typeof packet[key] !== "boolean") throw new Error("Invalid flag: " + key);
+        }
+        if (!Number.isInteger(packet.seq) || packet.seq < 0 || packet.t < 0 ||
+            packet.pwm_hz < 0 || packet.pwm_set < 0 || packet.pwm_set > 100 ||
+            packet.pwm_duty < 0 || packet.pwm_duty > 100) {
+          throw new Error("Telemetry outside supported range");
+        }
+        return packet;
+      }
+      let pollGeneration = 0;
+      let activePollController = null;
+      let commandQueue = [];
+      let commandGeneration = 0;
+      let commandUncertain = false;
+      let pendingDutyValue = null;
+      function canControl() {
+        return !state.demoMode && state.connState === "LIVE" && !commandUncertain;
+      }
+      function cancelPendingDuty() {
+        if (state.sliderThrottleTimer !== null) clearTimeout(state.sliderThrottleTimer);
+        state.sliderThrottleTimer = null;
+        pendingDutyValue = null;
+        commandQueue = commandQueue.filter(command => command.kind !== "duty");
+      }
+      function invalidatePolling() {
+        ++pollGeneration;
+        if (activePollController) activePollController.abort();
+        if (state.pollTimerId !== null) clearTimeout(state.pollTimerId);
+        state.pollTimerId = null;
+      }
+      const ALL_ANNUNCIATORS = [
+        "ann-AUTO", "ann-100ms", "ann-RECORD", "ann-MAX", "ann-MIN", "ann-AVG",
+        "ann-H-box", "ann-AC", "ann-DC", "ann-DUTY",
+        "ann-u", "ann-m", "ann-V", "ann-A",
+        "ann-n", "ann-F", "ann-S", "ann-PCT",
+        "ann-M", "ann-k", "ann-OHM", "ann-Hz",
+        "ann-BATT-body", "ann-BATT-nub", "ann-BATT-minus", "ann-BATT-plus",
+        "ann-BEEP-1", "ann-BEEP-2", "ann-BEEP-3", "ann-BEEP-4",
+        "ann-PCT-DELTA", "ann-4000", "ann-mV-bot"
+      ];
+
+      function computeExpectedVoltage(dutyPct) {
+        if (dutyPct === null || dutyPct === undefined || Number.isNaN(dutyPct)) return null;
+        const d = dutyPct / 100.0;
+        return state.vLow + d * (state.vHigh - state.vLow);
+      }
+
+      function computeVoltageDerivedDuty(vAvg) {
+        if (vAvg === null || vAvg === undefined || Number.isNaN(vAvg)) return null;
+        const span = state.vHigh - state.vLow;
+        if (Math.abs(span) < 1e-6) return null;
+        return 100.0 * ((vAvg - state.vLow) / span);
+      }
+
+      function getAnalogProvenance(d) {
+        if (!d) return "UNAVAILABLE";
+        if (d.pwm_avg_sim === true) return "CALCULATED";
+        if (d.pwm_avg_sim === false && d.adc_fluke_ok === true) return "ADC MEASURED";
+        return "UNAVAILABLE";
+      }
+
+      function isNoEdgesDC(d) {
+        if (!d) return false;
+        return Number.isFinite(d.pwm_hz) && d.pwm_hz < 0.5 &&
+          (d.pwm_duty <= 0.05 || d.pwm_duty >= 99.95);
+      }
+
+      /* =========================================================================
+       * 4. RENDER COORDINATOR (requestAnimationFrame)
+       * ========================================================================= */
+      function scheduleRender() {
+        state.needsRender = true;
+      }
+
+      function renderLoop() {
+        updateConnectionTimingState();
+        if (state.needsRender) {
+          state.needsRender = false;
+          renderFullUI();
+        }
+        requestAnimationFrame(renderLoop);
+      }
+
+      function updateConnectionTimingState() {
+        const now = performance.now();
+        if (state.demoMode) {
+          const prevState = state.connState;
+          if (state.lastTelemetry && (now - state.lastSeqAdvanceTime > 1600)) {
+            state.connState = "STALE";
+          } else {
+            state.connState = "DEMO";
+          }
+          if (state.connState !== prevState) state.needsRender = true;
+        } else {
+          const prevState = state.connState;
+          if (!state.lastTelemetry || state.consecutiveErrors >= 2) {
+            state.connState = "DISCONNECTED";
+          } else if ((now - state.lastPacketTime > 1500) || (now - state.lastSeqAdvanceTime > 1500)) {
+            state.connState = "STALE";
+          } else {
+            state.connState = "LIVE";
+          }
+          if (state.connState !== prevState) state.needsRender = true;
+        }
+
+        if (!canControl()) {
+          cancelPendingDuty();
+          commandQueue = [];
+        }
+        // Update packet age readout
+        if (state.lastPacketTime > 0) {
+          const ageMs = Math.max(0, Math.round(now - state.lastPacketTime));
+          setTextContentCached("meta-age", `${ageMs} ms`);
+        } else {
+          setTextContentCached("meta-age", "---");
+        }
+      }
+
+      function renderFullUI() {
+        const d = state.lastTelemetry;
+        const isStaleOrDisc = (state.connState === "STALE" || state.connState === "DISCONNECTED");
+
+        // 1. Top Status Bar
+        const badgeEl = document.getElementById("conn-badge");
+        badgeEl.className = "badge " + (
+          state.connState === "LIVE" ? "badge-live" :
+          state.connState === "DEMO" ? "badge-demo" :
+          state.connState === "STALE" ? "badge-stale" : "badge-disc"
+        );
+        const connLabel = state.demoMode && state.connState === "STALE"
+          ? "DEMO (STALE SEQ)"
+          : state.connState;
+        setTextContentCached("conn-text", connLabel);
+
+        setTextContentCached("meta-seq", d ? String(d.seq) : "---");
+        setTextContentCached("meta-uptime", d ? `${(d.t / 1000).toFixed(1)} s` : "---");
+
+        // 2. Determine Effective Source & Mode Compatibility
+        // In Hz mode, Analog source has no frequency signal
+        const analogBtn = document.getElementById("src-btn-analog");
+        if (state.mode === "hz") {
+          analogBtn.disabled = true;
+          if (state.source === "analog") {
+            state.source = "captured";
+          }
+        } else {
+          analogBtn.disabled = false;
+        }
+
+        // Highlight active mode & source buttons
+        document.querySelectorAll("[data-mode]").forEach((btn) => {
+          btn.classList.toggle("active", btn.getAttribute("data-mode") === state.mode);
+        });
+        document.querySelectorAll("[data-src]").forEach((btn) => {
+          btn.classList.toggle("active", btn.getAttribute("data-src") === state.source);
+        });
+
+        // Highlight active provenance box
+        document.getElementById("box-src-commanded").classList.toggle("active-focus", state.source === "commanded");
+        document.getElementById("box-src-captured").classList.toggle("active-focus", state.source === "captured");
+        document.getElementById("box-src-analog").classList.toggle("active-focus", state.source === "analog");
+
+        // 3. Reset all LCD annunciators first, then illuminate ONLY valid active ones
+        ALL_ANNUNCIATORS.forEach((id) => setElemClassOn(id, false));
+
+        // Turn on [H] hold box if data is STALE so operator sees frozen state on LCD
+        if (state.connState === "STALE") {
+          setElemClassOn("ann-H-box", true);
+        }
+
+        // 4. Compute LCD Primary Value, Annunciators & Bar Graph
+        const anaProv = getAnalogProvenance(d);
+        const expV_cmd = d ? computeExpectedVoltage(d.pwm_set) : null;
+        const expV_cap = d ? computeExpectedVoltage(d.pwm_duty) : null;
+        const estDuty_ana = (d && anaProv !== "UNAVAILABLE") ? computeVoltageDerivedDuty(d.fluke_v) : null;
+
+        let lcdResult = { leadOne: false, chars: ["-", "-", "-", "-"], dp: 0, minus: false };
+        let barVal = null;
+        let barMax = 100;
+        let sourceDesc = "";
+        let barScaleDesc = "";
+
+        if (state.mode === "duty") {
+          setElemClassOn("ann-DUTY", true);
+          setElemClassOn("ann-PCT", true);
+          barMax = 100.0;
+          barScaleDesc = "0 – 100.0 %";
+
+          if (state.source === "captured") {
+            sourceDesc = "CAPTURED CONTROL-PIN (GPIO16)";
+            if (d) {
+              lcdResult = formatValueForLCD(d.pwm_duty, 1, 199.9);
+              barVal = d.pwm_duty;
+            }
+          } else if (state.source === "commanded") {
+            sourceDesc = "COMMANDED TARGET (pwm_set)";
+            if (d) {
+              lcdResult = formatValueForLCD(d.pwm_set, 1, 199.9);
+              barVal = d.pwm_set;
+            }
+          } else if (state.source === "analog") {
+            sourceDesc = `VOLTAGE-DERIVED ESTIMATE (${anaProv})`;
+            if (d && estDuty_ana !== null) {
+              lcdResult = formatValueForLCD(estDuty_ana, 1, 199.9);
+              barVal = estDuty_ana;
+            }
+          }
+        } else if (state.mode === "hz") {
+          setElemClassOn("ann-Hz", true);
+          barMax = state.hzBarRange;
+          barScaleDesc = `0 – ${(state.hzBarRange / 1000).toFixed(0)} kHz`;
+
+          if (state.source === "captured") {
+            if (d) {
+              if (isNoEdgesDC(d)) {
+                sourceDesc = "CAPTURED PIN: NO EDGES / DC";
+                setElemClassOn("ann-DC", true);
+                lcdResult = { leadOne: false, chars: [" ", "d", "c", " "], dp: 0, minus: false };
+                barVal = 0;
+              } else {
+                sourceDesc = "CAPTURED CONTROL-PIN (GPIO16)";
+                if (d.pwm_hz < 0.5) {
+                  sourceDesc = "CAPTURED PIN: NO EDGES / CHECK SIGNAL";
+                  lcdResult = { leadOne: false, chars: ["-", "-", "-", "-"], dp: 0, minus: false };
+                  barVal = null;
+                } else {
+                  lcdResult = formatValueForLCD(d.pwm_hz, 0, 9999);
+                  barVal = d.pwm_hz;
+                }
+              }
+            } else {
+              sourceDesc = "CAPTURED CONTROL-PIN (GPIO16)";
+            }
+          } else if (state.source === "commanded") {
+            sourceDesc = "CONFIGURED FIXED OUTPUT (5000 Hz)";
+            if (d) {
+              lcdResult = formatValueForLCD(5000, 0, 9999);
+              barVal = 5000;
+            }
+          }
+        } else if (state.mode === "v") {
+          setElemClassOn("ann-DC", true);
+          setElemClassOn("ann-V", true);
+          barMax = state.vBarRange;
+          barScaleDesc = `0 – ${state.vBarRange.toFixed(1)} V`;
+          if (state.vBarRange === 4) {
+            setElemClassOn("ann-4000", true);
+            setElemClassOn("ann-mV-bot", true);
+          }
+
+          if (state.source === "analog") {
+            sourceDesc = `FLUKE_V (${anaProv})`;
+            if (d && anaProv !== "UNAVAILABLE") {
+              lcdResult = formatValueForLCD(d.fluke_v, 3, 19.999);
+              barVal = d.fluke_v;
+            }
+          } else if (state.source === "captured") {
+            sourceDesc = "EXPECTED V_AVG FROM CAPTURED DUTY";
+            if (d && expV_cap !== null) {
+              lcdResult = formatValueForLCD(expV_cap, 3, 19.999);
+              barVal = expV_cap;
+            }
+          } else if (state.source === "commanded") {
+            sourceDesc = "EXPECTED V_AVG FROM COMMANDED DUTY";
+            if (d && expV_cmd !== null) {
+              lcdResult = formatValueForLCD(expV_cmd, 3, 19.999);
+              barVal = expV_cmd;
+            }
+          }
+        }
+
+        renderLCDMainDigits(lcdResult.leadOne, lcdResult.chars, lcdResult.dp, lcdResult.minus);
+        renderBarGraph(barVal, barMax, !d);
+        setTextContentCached("lcd-source-desc", sourceDesc);
+        setTextContentCached("lcd-bar-scale-desc", barScaleDesc);
+
+        // 5. Populate Three-Source Provenance Cards
+        if (d) {
+          // Card A: Commanded
+          const cmdPill = document.getElementById("pill-cmd-src");
+          cmdPill.textContent = d.pwm_manual ? "MANUAL WEB" : "POT KNOB";
+          cmdPill.className = "prov-pill " + (d.pwm_manual ? "prov-calc" : "prov-cmd");
+          setTextContentCached("val-cmd-duty", `${d.pwm_set.toFixed(1)} %`);
+          setTextContentCached("val-cmd-vexp", expV_cmd !== null ? `${expV_cmd.toFixed(3)} V` : "--- V");
+
+          // Card B: Captured Control-Pin Timing
+          const capPill = document.getElementById("pill-cap-status");
+          const noEdges = isNoEdgesDC(d);
+          if (noEdges) {
+            capPill.textContent = "NO EDGES / DC";
+            capPill.className = "prov-pill prov-calc";
+            setTextContentCached("val-cap-hz", "NO EDGES / DC (0 Hz)");
+          } else if (d.pwm_hz < 0.5) {
+            capPill.textContent = "NO EDGES / CHECK SIGNAL";
+            capPill.className = "prov-pill prov-err";
+            setTextContentCached("val-cap-hz", "NO EDGES (NOT CONFIRMED DC)");
+          } else {
+            capPill.textContent = "MCPWM GPIO16";
+            capPill.className = "prov-pill prov-ok";
+            setTextContentCached("val-cap-hz", `${Math.round(d.pwm_hz)} Hz`);
+          }
+          setTextContentCached("val-cap-duty", `${d.pwm_duty.toFixed(1)} %`);
+          setTextContentCached("val-cap-vexp", expV_cap !== null ? `${expV_cap.toFixed(3)} V` : "--- V");
+
+          // Card C: Analog / Calculated Fallback
+          const anaPill = document.getElementById("pill-ana-status");
+          anaPill.textContent = anaProv;
+          anaPill.className = "prov-pill " + (
+            anaProv === "ADC MEASURED" ? "prov-ok" :
+            anaProv === "CALCULATED" ? "prov-calc" : "prov-err"
+          );
+
+          if (anaProv !== "UNAVAILABLE") {
+            setTextContentCached("val-ana-v", `${d.fluke_v.toFixed(3)} V`);
+            setTextContentCached("val-ana-est-duty", estDuty_ana !== null ? `${estDuty_ana.toFixed(1)} %` : "--- %");
+          } else {
+            setTextContentCached("val-ana-v", "UNAVAILABLE");
+            setTextContentCached("val-ana-est-duty", "--- %");
+          }
+          setTextContentCached("val-ana-flags", `sim:${d.pwm_avg_sim ? "1" : "0"} ok:${d.adc_fluke_ok ? "1" : "0"}`);
+
+          // Comparison Deltas
+          const diffCapCmd = d.pwm_duty - d.pwm_set;
+          setTextContentCached("delta-cap-cmd", `${diffCapCmd >= 0 ? "+" : ""}${diffCapCmd.toFixed(2)} %`);
+
+          if (estDuty_ana !== null) {
+            const diffVestCap = estDuty_ana - d.pwm_duty;
+            setTextContentCached("delta-vest-cap", `${diffVestCap >= 0 ? "+" : ""}${diffVestCap.toFixed(2)} %`);
+          } else {
+            setTextContentCached("delta-vest-cap", "N/A");
+          }
+
+          if (anaProv !== "UNAVAILABLE" && expV_cap !== null) {
+            const diffVVexp = d.fluke_v - expV_cap;
+            setTextContentCached("delta-v-vexp", `${diffVVexp >= 0 ? "+" : ""}${diffVVexp.toFixed(3)} V`);
+          } else {
+            setTextContentCached("delta-v-vexp", "N/A");
+          }
+        }
+
+        // 6. PWM Controls & Potentiometer Authority
+        const controlsDisabled = !canControl();
+        document.getElementById("btn-follow-pot").disabled = controlsDisabled;
+        document.getElementById("slider-duty").disabled = controlsDisabled;
+        document.getElementById("input-duty").disabled = controlsDisabled;
+        document.getElementById("btn-set-duty").disabled = controlsDisabled;
+        document.querySelectorAll(".btn-preset").forEach((b) => { b.disabled = controlsDisabled; });
+
+        if (d) {
+          setTextContentCached("ctrl-auth-text", d.pwm_manual ? "MANUAL WEB OVERRIDE" : "PHYSICAL POTENTIOMETER");
+          setTextContentCached("val-pot-v", `${d.pot_v.toFixed(3)} V`);
+          const followBtn = document.getElementById("btn-follow-pot");
+          followBtn.classList.toggle("pot-active", !d.pwm_manual);
+
+          // Keep slider synced with telemetry pwm_set when operator is not actively dragging
+          if (!state.userDraggingSlider && document.activeElement !== document.getElementById("input-duty")) {
+            document.getElementById("slider-duty").value = d.pwm_set.toFixed(1);
+            document.getElementById("input-duty").value = d.pwm_set.toFixed(1);
+          }
+        }
+
+        // 7. Secondary Air Data Panel & /zero Gate
+        const airPill = document.getElementById("pill-air-status");
+        if (!d) {
+          airPill.textContent = "NO TELEMETRY";
+          airPill.className = "prov-pill prov-err";
+        } else if (d.sensors_sim) {
+          airPill.textContent = "SIMULATED AIR DATA";
+          airPill.className = "prov-pill prov-calc";
+        } else if (d.adc_sensors_ok) {
+          airPill.textContent = "LIVE ADC SENSORS";
+          airPill.className = "prov-pill prov-ok";
+        } else {
+          airPill.textContent = "SENSOR ADC FAULT";
+          airPill.className = "prov-pill prov-err";
+        }
+
+        if (d) {
+          setTextContentCached("air-ias", `${d.ias_kt.toFixed(1)} kt`);
+          setTextContentCached("air-alt", `${Math.round(d.alt_ft)} ft`);
+          setTextContentCached("air-qc", `${d.qc_kpa.toFixed(3)} kPa`);
+          setTextContentCached("air-rail-v", `${d.rail_v.toFixed(3)} V`);
+          setTextContentCached("air-pitot-kpa", `${d.pitot_kpa.toFixed(2)} kPa`);
+          setTextContentCached("air-static-kpa", `${d.static_kpa.toFixed(2)} kPa`);
+          setTextContentCached("air-pitot-v", `${d.pitot_v.toFixed(3)} V`);
+          setTextContentCached("air-static-v", `${d.static_v.toFixed(3)} V`);
+        }
+
+        // /zero safety gate: Disabled if in demo mode, stale/disconnected, simulated sensors, or invalid ADC
+        const zeroEligible = Boolean(
+          canControl() &&
+          d &&
+          d.sensors_sim === false &&
+          d.adc_sensors_ok === true
+        );
+        const chkZero = document.getElementById("chk-zero-ambient");
+        const btnZero = document.getElementById("btn-zero-sensors");
+        chkZero.disabled = !zeroEligible;
+        if (!zeroEligible) chkZero.checked = false;
+        btnZero.disabled = !(zeroEligible && chkZero.checked);
+      }
+
+      /* =========================================================================
+       * 5. LIVE TELEMETRY POLLING (10 Hz, Single In-Flight, Backoff, Stale Check)
+       * ========================================================================= */
+      async function pollTelemetryOnce() {
+        if (state.demoMode || state.pollInFlight) return;
+        state.pollInFlight = true;
+        const generation = pollGeneration;
+        const controller = new AbortController();
+        activePollController = controller;
+        const timeoutId = setTimeout(() => controller.abort(), 750);
+        try {
+          const resp = await fetch("/data", {
+            method: "GET", cache: "no-store", signal: controller.signal
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          // Timeout covers the response body as well as the headers.
+          const json = validateTelemetry(await resp.json());
+          if (generation !== pollGeneration || state.demoMode) return;
+          const now = performance.now();
+          state.lastPacketTime = now;
+          state.consecutiveErrors = 0;
+          if (state.lastSeq === null || json.seq !== state.lastSeq) {
+            state.lastSeq = json.seq;
+            state.lastSeqAdvanceTime = now;
+          }
+          state.lastTelemetry = json;
+          scheduleRender();
+        } catch (err) {
+          if (generation === pollGeneration && !state.demoMode) {
+            state.consecutiveErrors += 1;
+            scheduleRender();
+          }
+        } finally {
+          clearTimeout(timeoutId);
+          if (activePollController === controller) activePollController = null;
+          state.pollInFlight = false;
+          scheduleNextPoll();
+        }
+      }
+      function scheduleNextPoll() {
+        if (state.pollTimerId) clearTimeout(state.pollTimerId);
+        if (state.demoMode) return;
+
+        // 100ms (10 Hz) nominal, exponential backoff up to 2000ms on consecutive errors
+        const delay = state.consecutiveErrors === 0
+          ? 100
+          : Math.min(2000, 100 * Math.pow(1.7, state.consecutiveErrors));
+
+        state.pollTimerId = setTimeout(pollTelemetryOnce, delay);
+      }
+
+      /* =========================================================================
+       * 6. SERIALIZED COMMAND DISPATCH (/pwm and /zero)
+       * ========================================================================= */
+      function enqueueCommand(command) {
+        if (!canControl()) return;
+        command.generation = commandGeneration;
+        commandQueue.push(command);
+        void drainCommands();
+      }
+      async function drainCommands() {
+        if (state.cmdInFlight) return;
+        state.cmdInFlight = true;
+        try {
+          while (commandQueue.length && canControl()) {
+            const command = commandQueue.shift();
+            if (command.generation !== commandGeneration) continue;
+            if (command.kind === "zero") {
+              const d = state.lastTelemetry;
+              if (!d || d.sensors_sim || !d.adc_sensors_ok ||
+                  !document.getElementById("chk-zero-ambient").checked) continue;
+            }
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 2500);
+            setTextContentCached("cmd-flight-status", "Sending " + command.url + "...");
+            try {
+              const response = await fetch(command.url, {
+                method: "GET", cache: "no-store", signal: controller.signal
+              });
+              const body = (await response.text()).trim();
+              if (!response.ok) throw new Error("HTTP " + response.status);
+              if (command.kind !== "zero" && body !== "ok") throw new Error("Unexpected reply");
+              if (command.generation === commandGeneration && !state.demoMode) {
+                if (command.kind === "zero") {
+                  const result = JSON.parse(body);
+                  if (!Number.isFinite(result.qc_zero_kpa)) throw new Error("Invalid zero reply");
+                  document.getElementById("zero-result-msg").textContent =
+                    "Saved offset: " + result.qc_zero_kpa.toFixed(4) + " kPa";
+                  document.getElementById("chk-zero-ambient").checked = false;
+                }
+                setTextContentCached("cmd-flight-status", "Accepted; verify returned telemetry");
+                scheduleRender();
+              }
+            } catch (error) {
+              // An interrupted GET may already have reached the hardware. Do not
+              // retry or dispatch a conflicting command with an unknown outcome.
+              commandUncertain = true;
+              commandQueue = [];
+              cancelPendingDuty();
+              setTextContentCached("cmd-flight-status",
+                "Command outcome unknown. Check output, then reload before controlling.");
+              scheduleRender();
+              break;
+            } finally {
+              clearTimeout(timer);
+            }
+          }
+        } finally {
+          state.cmdInFlight = false;
+          if (!canControl()) commandQueue = [];
+        }
+      }
+      function sendPwmDutyCommand(dutyVal) {
+        if (!canControl() || !Number.isFinite(Number(dutyVal))) return;
+        const value = Math.min(100, Math.max(0, Number(dutyVal)));
+        // Latest unsent duty replaces older unsent duty, never an active request.
+        commandQueue = commandQueue.filter(command => command.kind !== "duty");
+        enqueueCommand({ kind: "duty", url: "/pwm?duty=" + value.toFixed(1) });
+      }
+      function sendFollowPotCommand() {
+        if (!canControl()) return;
+        cancelPendingDuty();
+        commandQueue = commandQueue.filter(command => command.kind !== "pot");
+        // Waits behind any active request; no race with manual duty.
+        enqueueCommand({ kind: "pot", url: "/pwm?src=pot" });
+      }
+      function sendZeroSensorsCommand() {
+        const d = state.lastTelemetry;
+        if (!canControl() || !d || d.sensors_sim || !d.adc_sensors_ok ||
+            !document.getElementById("chk-zero-ambient").checked ||
+            commandQueue.some(command => command.kind === "zero")) return;
+        enqueueCommand({ kind: "zero", url: "/zero" });
+      }
+      /* =========================================================================
+       * 7. ISOLATED OPT-IN DEMO ADAPTER (Never mixes with live telemetry)
+       * ========================================================================= */
+      let demoIntervalId = null;
+      let demoSeqCounter = 1000;
+      let demoStartMs = performance.now();
+
+      function buildDemoPacket(scenario) {
+        const now = performance.now();
+        if (scenario !== "freeze_seq") {
+          demoSeqCounter += 1;
+        }
+        const uptime = Math.round(now - demoStartMs);
+
+        const base = {
+          seq: demoSeqCounter,
+          t: uptime,
+          pwm_set: 50.0,
+          pwm_duty: 50.0,
+          pwm_hz: 5000,
+          pwm_manual: false,
+          pot_v: 1.725,
+          fluke_v: 2.050,
+          pwm_avg_sim: true,
+          adc_fluke_ok: false,
+          pitot_v: 0.660,
+          static_v: 3.310,
+          rail_v: 5.012,
+          pitot_kpa: 101.32,
+          static_kpa: 101.32,
+          qc_kpa: 0.000,
+          ias_kt: 0.0,
+          alt_ft: 112,
+          sensors_sim: true,
+          adc_sensors_ok: false
+        };
+
+        if (scenario === "50_calc") {
+          // Default 50% duty with calculated fluke_v fallback
+        } else if (scenario === "50_adc") {
+          base.pwm_avg_sim = false;
+          base.adc_fluke_ok = true;
+          base.fluke_v = 2.038; // Slight realistic difference from 2.050V
+          base.pwm_duty = 49.9;
+        } else if (scenario === "0_dc") {
+          base.pwm_set = 0.0;
+          base.pwm_duty = 0.0;
+          base.pwm_hz = 0; // No edges at 0% DC
+          base.pot_v = 0.080;
+          base.fluke_v = 0.500;
+        } else if (scenario === "100_dc") {
+          base.pwm_set = 100.0;
+          base.pwm_duty = 100.0;
+          base.pwm_hz = 0; // No edges at 100% DC
+          base.pwm_manual = true;
+          base.fluke_v = 3.600;
+        } else if (scenario === "live_air") {
+          base.sensors_sim = false;
+          base.adc_sensors_ok = true;
+          base.pitot_kpa = 103.45;
+          base.static_kpa = 101.30;
+          base.qc_kpa = 2.150;
+          base.ias_kt = 114.6;
+          base.alt_ft = 120;
+        }
+
+        return base;
+      }
+
+      function setDemoMode(enabled) {
+        invalidatePolling();
+        ++commandGeneration;
+        cancelPendingDuty();
+        commandQueue = [];
+        state.demoMode = enabled;
+        state.lastTelemetry = null;
+        state.lastSeq = null;
+        state.lastPacketTime = 0;
+        state.lastSeqAdvanceTime = 0;
+        state.consecutiveErrors = 0;
+        const btn = document.getElementById("btn-toggle-demo");
+        const drawer = document.getElementById("demo-drawer");
+
+        if (enabled) {
+          if (state.pollTimerId) clearTimeout(state.pollTimerId);
+          btn.textContent = "OPT-IN DEMO MODE: ON";
+          btn.classList.add("active");
+          drawer.classList.add("visible");
+
+          demoStartMs = performance.now();
+          const tickDemo = () => {
+            if (!state.demoMode) return;
+            const pkt = buildDemoPacket(state.demoScenario);
+            const now = performance.now();
+            state.lastPacketTime = now;
+            if (state.lastSeq === null || pkt.seq !== state.lastSeq) {
+              state.lastSeq = pkt.seq;
+              state.lastSeqAdvanceTime = now;
+            }
+            state.lastTelemetry = pkt;
+            scheduleRender();
+          };
+          tickDemo();
+          demoIntervalId = setInterval(tickDemo, 100);
+        } else {
+          if (demoIntervalId) clearInterval(demoIntervalId);
+          demoIntervalId = null;
+          btn.textContent = "OPT-IN DEMO MODE: OFF";
+          btn.classList.remove("active");
+          drawer.classList.remove("visible");
+
+          state.lastTelemetry = null;
+          state.lastSeq = null;
+          state.lastPacketTime = 0;
+          state.lastSeqAdvanceTime = 0;
+          state.connState = "DISCONNECTED";
+          scheduleRender();
+          pollTelemetryOnce();
+        }
+      }
+
+      /* =========================================================================
+       * 8. EVENT LISTENERS
+       * ========================================================================= */
+      // Mode & Source selectors
+      document.querySelectorAll("[data-mode]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.mode = btn.getAttribute("data-mode");
+          scheduleRender();
+        });
+      });
+
+      document.querySelectorAll("[data-src]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (btn.disabled) return;
+          state.source = btn.getAttribute("data-src");
+          scheduleRender();
+        });
+      });
+
+      // Bar graph configurable ranges
+      document.getElementById("sel-v-range").addEventListener("change", (e) => {
+        state.vBarRange = parseFloat(e.target.value) || 5.0;
+        scheduleRender();
+      });
+
+      document.getElementById("sel-hz-range").addEventListener("change", (e) => {
+        state.hzBarRange = parseFloat(e.target.value) || 10000;
+        scheduleRender();
+      });
+
+      // V_low / V_high expected terminal voltage tuning bounds
+      function updateVoltageBounds() {
+        const lowInput = document.getElementById("inp-vlow");
+        const highInput = document.getElementById("inp-vhigh");
+        const low = lowInput.value.trim() === "" ? NaN : Number(lowInput.value);
+        const high = highInput.value.trim() === "" ? NaN : Number(highInput.value);
+        const valid = Number.isFinite(low) && Number.isFinite(high) &&
+          low >= 0 && low <= 5 && high > low && high <= 15;
+        lowInput.setCustomValidity(valid ? "" : "Use 0 <= low < high <= 15 V; low <= 5 V.");
+        highInput.setCustomValidity(valid ? "" : "High must exceed low and be <= 15 V.");
+        if (valid) { state.vLow = low; state.vHigh = high; scheduleRender(); }
+      }
+      document.getElementById("inp-vlow").addEventListener("input", updateVoltageBounds);
+      document.getElementById("inp-vhigh").addEventListener("input", updateVoltageBounds);
+      // Slider & Manual Duty Controls
+      const sliderEl = document.getElementById("slider-duty");
+      const numInputEl = document.getElementById("input-duty");
+
+      sliderEl.addEventListener("pointerdown", () => { state.userDraggingSlider = true; });
+      window.addEventListener("pointerup", () => { state.userDraggingSlider = false; });
+
+      sliderEl.addEventListener("input", () => {
+        numInputEl.value = parseFloat(sliderEl.value).toFixed(1);
+        pendingDutyValue = Number(sliderEl.value);
+        if (state.sliderThrottleTimer === null) {
+          state.sliderThrottleTimer = setTimeout(() => {
+            state.sliderThrottleTimer = null;
+            const value = pendingDutyValue;
+            pendingDutyValue = null;
+            if (value !== null) sendPwmDutyCommand(value);
+          }, 120);
+        }
+      });
+
+      document.getElementById("btn-set-duty").addEventListener("click", () => {
+        const val = parseFloat(numInputEl.value);
+        if (!Number.isNaN(val)) {
+          sliderEl.value = Math.min(100, Math.max(0, val)).toFixed(1);
+          cancelPendingDuty();
+          sendPwmDutyCommand(val);
+        }
+      });
+
+      document.querySelectorAll(".btn-preset").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const val = parseFloat(btn.getAttribute("data-preset"));
+          sliderEl.value = val.toFixed(1);
+          numInputEl.value = val.toFixed(1);
+          cancelPendingDuty();
+          sendPwmDutyCommand(val);
+        });
+      });
+
+      document.getElementById("btn-follow-pot").addEventListener("click", () => {
+        sendFollowPotCommand();
+      });
+
+      // Pitot/Static Zero confirmation & button
+      document.getElementById("chk-zero-ambient").addEventListener("change", () => {
+        scheduleRender();
+      });
+
+      document.getElementById("btn-zero-sensors").addEventListener("click", () => {
+        sendZeroSensorsCommand();
+      });
+
+      // Demo Mode Toggle & Scenarios
+      document.getElementById("btn-toggle-demo").addEventListener("click", () => {
+        setDemoMode(!state.demoMode);
+      });
+
+      document.querySelectorAll(".btn-demo-scen").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".btn-demo-scen").forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          state.demoScenario = btn.getAttribute("data-scen");
+          if (state.demoScenario !== "freeze_seq") {
+            state.lastSeqAdvanceTime = performance.now();
+          }
+          scheduleRender();
+        });
+      });
+
+      /* =========================================================================
+       * 9. INITIALIZATION
+       * ========================================================================= */
+      requestAnimationFrame(renderLoop);
+      pollTelemetryOnce();
+    })();
+  </script>
+</body>
+</html>
