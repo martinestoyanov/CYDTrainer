@@ -1,0 +1,139 @@
+﻿===== platformio.ini =====
+[platformio]
+src_dir = main
+data_dir = data
+default_envs = e175_testbench
+
+[env:e175_testbench]
+platform = espressif32@6.9.0      ; ESP-IDF 5.x; bundle requires IDF >= 5.2
+board = esp32-s3-devkitc-1
+framework = espidf
+
+; WROOM-1-N16R8: 16 MB quad flash, 8 MB octal PSRAM (PSRAM enabled in sdkconfig.defaults)
+board_build.flash_mode = qio
+board_upload.flash_size = 8MB
+board_upload.maximum_size = 3145728   ; 3 MB factory partition
+board_build.partitions = partitions.csv
+board_build.filesystem = littlefs
+
+upload_speed = 921600
+monitor_speed = 115200
+monitor_filters = esp32_exception_decoder
+upload_port = COM3     ; the "UART" USB-C port (CH343)
+monitor_port = COM3
+===== sdkconfig.defaults =====
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# 1 ms tick: the Core 1 loop yields with vTaskDelay(1)
+CONFIG_FREERTOS_HZ=1000
+
+# Native USB belongs to TinyUSB, so the console moves to UART0 (the board's UART/CH343 port)
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# 8 MB octal PSRAM (needed later for the RGB LCD frame buffer)
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+
+# TinyUSB: network class only, USB task pinned to Core 0
+CONFIG_TINYUSB_NET_MODE_NCM=y
+CONFIG_TINYUSB_CDC_ENABLED=n
+CONFIG_TINYUSB_TASK_AFFINITY_CPU0=y
+
+# lwIP on Core 0
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
+
+===== partitions.csv =====
+# Name,   Type, SubType, Offset,  Size
+nvs,      data, nvs,     0x9000,  0x6000
+phy_init, data, phy,     0xf000,  0x1000
+factory,  app,  factory, 0x10000, 0x300000
+storage,  data, littlefs,,        0x400000
+
+===== main\CMakeLists.txt =====
+idf_component_register(
+    SRCS "main.cpp" "usb_net.cpp" "web_server.cpp" "hw_task.cpp" "board.cpp"
+    INCLUDE_DIRS "."
+)
+
+# Packs ../data into the "storage" partition and flashes it with the app
+littlefs_create_partition_image(storage ../data FLASH_IN_PROJECT)
+
+===== main\idf_component.yml =====
+dependencies:
+  idf: ">=5.2"
+  espressif/esp_tinyusb: "~1.7.0"
+  joltwallet/littlefs: "^1.14.8"
+
+===== main\main.cpp =====
+// app_main runs on Core 0: USB network + HTTP/LittleFS live here.
+// Core 1 gets only the hardware task (hw_task.cpp).
+#include "nvs_flash.h"
+#include "shared_state.h"
+#include "usb_net.h"
+#include "web_server.h"
+
+extern "C" void app_main(void)
+{
+    esp_err_t e = nvs_flash_init();
+    if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        e = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(e);
+
+    hw_start();         // Core 1: I2C + CH422G (selects native USB), ADS1115, LEDC, capture
+    usb_net_start();    // Core 0: TinyUSB NCM + netif + DHCP
+    web_server_start(); // Core 0: LittleFS + httpd
+}
+
+===== main\board.h =====
+#pragma once
+#include "driver/i2c_master.h"
+
+// CH422G IO expander. Mode register at 0x24, output register at 0x38.
+//   EXIO1 CTP_RST, EXIO2 backlight (DISP), EXIO3 LCD_RST, EXIO4 SD_CS,
+//   EXIO5 USB_SEL (0 = IO19/20 to the USB port, 1 = to the CAN transceiver)
+#define EXIO_CTP_RST   (1 << 1)
+#define EXIO_BACKLIGHT (1 << 2)
+#define EXIO_LCD_RST   (1 << 3)
+#define EXIO_SD_CS     (1 << 4)
+#define EXIO_USB_SEL   (1 << 5)
+
+// Selects native USB, holds LCD/touch out of reset, SD deselected, backlight off.
+esp_err_t board_io_init(i2c_master_bus_handle_t bus);
+esp_err_t board_io_write(uint8_t outputs);
+
+===== main\board.cpp =====
+#include "board.h"
+#include "esp_check.h"
+
+static const char *TAG = "board";
+static i2c_master_dev_handle_t s_mode, s_out;
+
+esp_err_t board_io_write(uint8_t outputs)
+{
+    return i2c_master_transmit(s_out, &outputs, 1, 50);
+}
+
+esp_err_t board_io_init(i2c_master_bus_handle_t bus)
+{
+    // The CH422G answers on fixed addresses per register rather than using a
+    // register pointer, so each register is its own I2C "device".
+    i2c_device_config_t dc = {};
+    dc.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    dc.scl_speed_hz = 100000;
+    dc.device_address = 0x24;
+    ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(bus, &dc, &s_mode), TAG, "add 0x24");
+    dc.device_address = 0x38;
+    ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(bus, &dc, &s_out), TAG, "add 0x38");
+
+    uint8_t mode = 0x01; // IO0-7 as outputs
+    ESP_RETURN_ON_ERROR(i2c_master_transmit(s_mode, &mode, 1, 50), TAG, "CH422G not responding");
+    return board_io_write(EXIO_CTP_RST | EXIO_LCD_RST | EXIO_SD_CS);
+}
+
