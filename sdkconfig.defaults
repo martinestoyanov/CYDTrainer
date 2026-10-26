@@ -1,24 +1,36 @@
 CONFIG_IDF_TARGET="esp32s3"
+
+# Actual MCN8R8 hardware: 8 MB Quad-SPI flash
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# Custom 8 MB partition table
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
-# 1 ms tick: the Core 1 loop yields with vTaskDelay(1)
+# Full ESP32-S3 CPU clock
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# 1 ms FreeRTOS tick
 CONFIG_FREERTOS_HZ=1000
 
-# Native USB belongs to TinyUSB, so the console moves to UART0 (the board's UART/CH343 port)
-CONFIG_ESP_CONSOLE_UART_DEFAULT=y
-CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+# Proven flash configuration
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
 
-# 8 MB octal PSRAM (needed later for the RGB LCD frame buffer)
+# Proven 8 MB Octal PSRAM configuration
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_SPEED_80M=y
 
-# TinyUSB: network class only, USB task pinned to Core 0
+# Native USB belongs to TinyUSB.
+# Console/logging remains on UART0 through the CH343 UART port.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# TinyUSB NCM network interface on Core 0
 CONFIG_TINYUSB_NET_MODE_NCM=y
 CONFIG_TINYUSB_CDC_ENABLED=n
 CONFIG_TINYUSB_TASK_AFFINITY_CPU0=y
 
-# lwIP on Core 0
+# lwIP TCP/IP processing on Core 0
 CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y

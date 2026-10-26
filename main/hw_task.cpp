@@ -183,8 +183,10 @@ static bool pot_read_mv(int *mv)
 
 // ---- MCPWM capture ----------------------------------------------------
 static portMUX_TYPE s_cap_mux = portMUX_INITIALIZER_UNLOCKED;
-static volatile uint64_t s_sum_period, s_sum_high;
-static volatile uint32_t s_cycles;
+// Accessed only while s_cap_mux is held, so volatile is unnecessary and causes
+// C++20 deprecation warnings for arithmetic/assignment on volatile objects.
+static uint64_t s_sum_period, s_sum_high;
+static uint32_t s_cycles;
 static uint32_t s_last_rise, s_high_pending;
 static bool s_have_rise, s_have_high;
 
@@ -317,6 +319,10 @@ static void hw_task(void *)
     int64_t next_probe = esp_timer_get_time() + ADS_REPROBE_US;
     ESP_LOGI(TAG, "ADS1115 at 0x%02X: %s", ADS_ADDR, present ? "found" : "not found, simulating sensors");
 
+    // Persistent pot filter state. -1 means "not primed yet"; the first valid
+    // ADC sample initializes the filter without a startup ramp.
+    float pot_filtered_mv = -1.0f;
+
     for (;;) {
         bool ok = false;
         if (!present && esp_timer_get_time() >= next_probe) {
@@ -366,9 +372,38 @@ static void hw_task(void *)
         }
 
         float manual = s_manual_duty.load();
-        float pot_pct = 100.0f * (pot_mv - POT_MV_MIN) / (float)(POT_MV_MAX - POT_MV_MIN);
-        float target = manual >= 0 ? manual : (pot_ok ? fminf(fmaxf(pot_pct, 0.0f), 100.0f) : duty_set);
-        if (fabsf(target - duty_set) >= 0.05f) {
+
+        // Smooth only the physical pot. Manual duty from the web API stays immediate.
+        if (pot_ok) {
+            if (pot_filtered_mv < 0.0f) {
+                pot_filtered_mv = (float)pot_mv;
+            } else {
+                pot_filtered_mv += POT_FILTER_ALPHA * ((float)pot_mv - pot_filtered_mv);
+            }
+        }
+
+        // Calibrated electrical position, before nonlinear mapping.
+        float pot_position = 0.0f;
+        if (pot_filtered_mv >= 0.0f) {
+            pot_position = 100.0f * (pot_filtered_mv - POT_MV_MIN) /
+                           (float)(POT_MV_MAX - POT_MV_MIN);
+            pot_position = fminf(fmaxf(pot_position, 0.0f), 100.0f);
+        }
+
+        // Bottom 5% is OFF. Remaining travel follows a quadratic curve.
+        // No additional 1% duty snap: that would enlarge the intended OFF zone.
+        const float u = fminf(fmaxf((pot_position - 5.0f) / 95.0f, 0.0f), 1.0f);
+        const float pot_duty = 100.0f * u * u;
+        const bool following_pot = manual < 0.0f;
+        const bool valid_pot = pot_ok && pot_filtered_mv >= 0.0f;
+        const float target = following_pot
+                                 ? (valid_pot ? pot_duty : duty_set)
+                                 : manual;
+
+        // 0.05 percentage points preserves useful low-duty adjustment.
+        // Endpoints bypass the deadband, but avoid redundant LEDC writes.
+        if (fabsf(target - duty_set) >= 0.05f ||
+            ((target == 0.0f || target == 100.0f) && target != duty_set)) {
             duty_set = target;
             pwm_apply(duty_set);
         }
@@ -400,7 +435,7 @@ static void hw_task(void *)
         // hardware measured, using the levels J2 B swings between.
         t.pwm_avg_sim = !(present && pwm_ok);
         t.fluke_v = t.pwm_avg_sim ? PWM_V_LOW + t.pwm_duty_pct / 100.0f * (PWM_V_HIGH - PWM_V_LOW) : raw[CH_PWM];
-        t.pot_v = pot_mv / 1000.0f;
+        t.pot_v = (pot_filtered_mv >= 0.0f ? pot_filtered_mv : (float)pot_mv) / 1000.0f;
         t.pwm_set_pct = duty_set;
         t.pwm_manual = manual >= 0;
         t.sensors_sim = !present;

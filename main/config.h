@@ -60,3 +60,8 @@
 #define NET_IP             "192.168.7.1"
 #define NET_MASK           "255.255.255.0"
 #define NET_MOUNT          "/www"
+
+// Potentiometer conditioning
+#define POT_FILTER_ALPHA       0.08f
+#define POT_DEADBAND_PCT       0.5f
+#define POT_END_SNAP_PCT       1.0f
