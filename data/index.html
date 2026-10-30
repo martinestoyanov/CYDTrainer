@@ -397,6 +397,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      min-width: 0; /* let wide children (square-wave SVG) scroll instead of widening the grid */
     }
 
     .card {
@@ -573,6 +574,94 @@
       align-items: center;
       gap: 4px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    /* Static Square-Wave Reference Card */
+    .wave-wrap {
+      background: var(--bg-card);
+      border: 1px solid var(--border-col);
+      border-radius: 6px;
+      padding: 6px 8px 2px;
+      overflow-x: auto;
+    }
+
+    .wave-svg {
+      display: block;
+      width: 100%;
+      min-width: 560px;
+      height: auto;
+      font-family: 'Consolas', 'Courier New', monospace;
+    }
+
+    .wave-grid { stroke: rgba(152, 161, 176, 0.14); stroke-width: 1; }
+    .wave-axis { stroke: rgba(152, 161, 176, 0.45); stroke-width: 1; }
+    .wave-level { stroke: rgba(152, 161, 176, 0.55); stroke-width: 1; stroke-dasharray: 5 4; }
+    .wave-cap { fill: none; stroke: var(--status-ok); stroke-width: 2.5; stroke-linejoin: miter; }
+    .wave-cmd { fill: none; stroke: var(--fluke-yellow); stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .wave-avg { stroke: var(--status-sim); stroke-width: 1.5; stroke-dasharray: 2 3; }
+    .wave-pad { fill: none; stroke: var(--accent-blue); stroke-width: 1.5; }
+    .wave-dim { stroke: #d1d5db; stroke-width: 1; fill: none; }
+    .wave-text { fill: var(--text-muted); font-size: 11px; }
+    .wave-text-strong { fill: #f3f4f6; font-size: 11px; font-weight: 700; }
+    .wave-text-cap { fill: var(--status-ok); font-size: 11px; font-weight: 700; }
+    .wave-text-cmd { fill: var(--fluke-yellow); font-size: 11px; }
+    .wave-text-avg { fill: var(--status-sim); font-size: 11px; }
+    .wave-text-pad { fill: var(--accent-blue); font-size: 11px; }
+    .wave-status { fill: var(--status-warn); font-size: 13px; font-weight: 700; text-anchor: middle; }
+
+    .wave-stats {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 640px) {
+      .wave-stats { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .wave-stat {
+      background: var(--bg-card);
+      border: 1px solid var(--border-col);
+      border-radius: 6px;
+      padding: 5px 8px;
+    }
+
+    .wave-stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    .wave-stat-val {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .wave-stat-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .wave-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 6px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .wave-legend .swatch {
+      display: inline-block;
+      width: 18px;
+      height: 0;
+      vertical-align: middle;
+      margin-right: 4px;
+      border-top: 2px solid;
     }
 
     .input-mini {
@@ -1113,6 +1202,122 @@
         </div>
       </div>
 
+      <!-- Card 1b: Static Square-Wave Reference (drawn from telemetry, not a scope capture) -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">J2-B Square Wave &mdash; Static Reference</span>
+          <span class="card-subtitle">Ideal waveform drawn from captured duty &amp; frequency, scaled to V_low / V_high. Not a scope capture.</span>
+        </div>
+
+        <div class="wave-wrap">
+          <svg id="wave-svg" class="wave-svg" viewBox="0 0 712 236" aria-label="Static square wave drawn from PWM telemetry">
+            <!-- Plot frame: x 70..630 holds two full periods; J2 B trace y 44..134; GPIO16 pad trace y 170..200 -->
+            <g id="wave-grid-layer">
+              <line class="wave-grid" x1="70" y1="44" x2="630" y2="44"/>
+              <line class="wave-grid" x1="70" y1="89" x2="630" y2="89"/>
+              <line class="wave-grid" x1="70" y1="134" x2="630" y2="134"/>
+              <line class="wave-grid" x1="210" y1="36" x2="210" y2="206"/>
+              <line class="wave-grid" x1="350" y1="36" x2="350" y2="206"/>
+              <line class="wave-grid" x1="490" y1="36" x2="490" y2="206"/>
+              <line class="wave-axis" x1="70" y1="36" x2="70" y2="206"/>
+              <line class="wave-axis" x1="70" y1="206" x2="630" y2="206"/>
+            </g>
+
+            <!-- Voltage level references for the J2 B trace -->
+            <line id="wave-line-vhigh" class="wave-level" x1="70" y1="44" x2="630" y2="44"/>
+            <line id="wave-line-vlow" class="wave-level" x1="70" y1="134" x2="630" y2="134"/>
+            <line id="wave-line-vavg" class="wave-avg" x1="70" y1="89" x2="630" y2="89"/>
+            <text id="wave-lbl-vhigh" class="wave-text" x="64" y="48" text-anchor="end">V_hi</text>
+            <text id="wave-lbl-vlow" class="wave-text" x="64" y="138" text-anchor="end">V_lo</text>
+            <text id="wave-lbl-vavg" class="wave-text-avg" x="636" y="93">V_avg</text>
+
+            <!-- Traces -->
+            <path id="wave-path-cmd" class="wave-cmd" d=""/>
+            <path id="wave-path-cap" class="wave-cap" d=""/>
+            <path id="wave-path-pad" class="wave-pad" d=""/>
+
+            <!-- Dimension lines: t_high above the first pulse, period T below the trace -->
+            <path id="wave-dim-thigh" class="wave-dim" d=""/>
+            <text id="wave-lbl-thigh" class="wave-text-cap" x="0" y="28" text-anchor="middle"></text>
+            <path id="wave-dim-tlow" class="wave-dim" d=""/>
+            <text id="wave-lbl-tlow" class="wave-text" x="0" y="28" text-anchor="middle"></text>
+            <path id="wave-dim-period" class="wave-dim" d=""/>
+            <text id="wave-lbl-period" class="wave-text-strong" x="210" y="156" text-anchor="middle"></text>
+
+            <!-- Trace labels -->
+            <text class="wave-text-cap" x="74" y="11">J2 B (terminal, true duty)</text>
+            <text id="wave-lbl-cmd" class="wave-text-cmd" x="320" y="11"></text>
+            <text class="wave-text-pad" x="64" y="188" text-anchor="end">GPIO16</text>
+            <text class="wave-text" x="636" y="174">3V3</text>
+            <text class="wave-text" x="636" y="204">0V</text>
+            <text class="wave-text" x="630" y="222" text-anchor="end">time &rarr; (2 periods, from a rising edge on B)</text>
+
+            <!-- Overlay status (no telemetry / DC) -->
+            <text id="wave-status" class="wave-status" x="350" y="94"></text>
+          </svg>
+        </div>
+
+        <div class="wave-stats">
+          <div class="wave-stat">
+            <div class="wave-stat-label">Frequency</div>
+            <div id="wave-st-freq" class="wave-stat-val">---</div>
+            <div id="wave-st-freq-sub" class="wave-stat-sub">captured</div>
+          </div>
+          <div class="wave-stat">
+            <div class="wave-stat-label">Period T</div>
+            <div id="wave-st-period" class="wave-stat-val">---</div>
+            <div id="wave-st-period-sub" class="wave-stat-sub">1 / f</div>
+          </div>
+          <div class="wave-stat">
+            <div class="wave-stat-label">t_high (B high)</div>
+            <div id="wave-st-thigh" class="wave-stat-val">---</div>
+            <div id="wave-st-thigh-sub" class="wave-stat-sub">GPIO16 low</div>
+          </div>
+          <div class="wave-stat">
+            <div class="wave-stat-label">t_low (B low)</div>
+            <div id="wave-st-tlow" class="wave-stat-val">---</div>
+            <div id="wave-st-tlow-sub" class="wave-stat-sub">GPIO16 high</div>
+          </div>
+          <div class="wave-stat">
+            <div class="wave-stat-label">Duty cap / cmd</div>
+            <div id="wave-st-duty" class="wave-stat-val">---</div>
+            <div id="wave-st-duty-sub" class="wave-stat-sub">&#916; ---</div>
+          </div>
+          <div class="wave-stat">
+            <div class="wave-stat-label">V_high / V_low</div>
+            <div id="wave-st-levels" class="wave-stat-val">---</div>
+            <div class="wave-stat-sub">tuning bounds (unverified)</div>
+          </div>
+          <div class="wave-stat">
+            <div class="wave-stat-label">V_avg expected</div>
+            <div id="wave-st-vavg" class="wave-stat-val">---</div>
+            <div class="wave-stat-sub">V_low + d(V_high &minus; V_low)</div>
+          </div>
+          <div class="wave-stat">
+            <div class="wave-stat-label">V_avg reported</div>
+            <div id="wave-st-fluke" class="wave-stat-val">---</div>
+            <div id="wave-st-fluke-sub" class="wave-stat-sub">fluke_v</div>
+          </div>
+          <div class="wave-stat">
+            <div class="wave-stat-label">LEDC duty counts</div>
+            <div id="wave-st-counts" class="wave-stat-val">---</div>
+            <div class="wave-stat-sub">of 4096 (12-bit), from pwm_set</div>
+          </div>
+          <div class="wave-stat">
+            <div class="wave-stat-label">Edges / 100 ms</div>
+            <div id="wave-st-edges" class="wave-stat-val">---</div>
+            <div class="wave-stat-sub">capture window = 2 &times; f &times; 0.1 s</div>
+          </div>
+        </div>
+
+        <div class="wave-legend">
+          <span><span class="swatch" style="border-color: var(--status-ok);"></span>Captured (MCPWM edge capture on GPIO16, inverted to B)</span>
+          <span><span class="swatch" style="border-color: var(--fluke-yellow); border-top-style: dashed;"></span>Commanded (pwm_set), shown only when it differs from captured</span>
+          <span><span class="swatch" style="border-color: var(--status-sim); border-top-style: dotted;"></span>Expected DC average on a meter</span>
+          <span><span class="swatch" style="border-color: var(--accent-blue);"></span>GPIO16 pad (LEDC output_invert = 1, so pad low = B high)</span>
+        </div>
+      </div>
+
       <!-- Card 2: PWM Output Control & Potentiometer Handover -->
       <div class="card">
         <div class="card-header">
@@ -1547,6 +1752,157 @@
       }
 
       /* =========================================================================
+       * 3b. STATIC SQUARE-WAVE REFERENCE
+       *     Draws an ideal two-period square wave from telemetry. The shape is
+       *     recomputed on every render, but it is a diagram of the numbers, not a
+       *     scope capture: edges are drawn vertical and levels come from V_low/V_high.
+       * ========================================================================= */
+      const WAVE = {
+        x0: 70, x1: 630,        // plot x extent, holds exactly 2 periods
+        yHi: 44, yLo: 134,      // J2 B trace: V_high / V_low rows
+        padHi: 170, padLo: 200, // GPIO16 pad trace: 3V3 / 0V rows
+        nominalHz: 5000,        // PWM_FREQ_HZ in config.h, used only when no edges were captured
+        dutyBits: 12            // PWM_DUTY_BITS in config.h
+      };
+
+      function setAttrCached(id, attr, value) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const key = "__attr_" + attr;
+        if (el[key] === value) return;
+        el[key] = value;
+        el.setAttribute(attr, value);
+      }
+
+      function fmtMicro(us) {
+        if (!Number.isFinite(us)) return "---";
+        if (us >= 10000) return (us / 1000).toFixed(2) + " ms";
+        if (us >= 1000) return (us / 1000).toFixed(3) + " ms";
+        return us.toFixed(1) + " µs";
+      }
+
+      // Two periods of an ideal square wave starting at a rising edge.
+      // yHigh/yLow are SVG rows; dutyPct is the fraction of each period at yHigh.
+      function squareWavePath(dutyPct, yHigh, yLow) {
+        const { x0, x1 } = WAVE;
+        const period = (x1 - x0) / 2;
+        const dFrac = Math.min(1, Math.max(0, dutyPct / 100));
+        if (dFrac <= 0) return `M${x0},${yLow} H${x1}`;
+        if (dFrac >= 1) return `M${x0},${yHigh} H${x1}`;
+        const highW = period * dFrac;
+        let dStr = `M${x0},${yLow} V${yHigh}`;
+        for (let n = 0; n < 2; n++) {
+          const start = x0 + n * period;
+          dStr += ` H${(start + highW).toFixed(2)} V${yLow} H${(start + period).toFixed(2)}`;
+          if (n === 0) dStr += ` V${yHigh}`;
+        }
+        return dStr;
+      }
+
+      // Horizontal dimension line with end ticks between xa and xb at row y.
+      function dimensionPath(xa, xb, y) {
+        if (!(xb - xa > 2)) return "";
+        return `M${xa.toFixed(2)},${y - 4} V${y + 4} M${xa.toFixed(2)},${y} H${xb.toFixed(2)} M${xb.toFixed(2)},${y - 4} V${y + 4}`;
+      }
+
+      function renderSquareWave(d, anaProv, expVCap) {
+        const { x0, x1, yHi, yLo, padHi, padLo } = WAVE;
+        const periodPx = (x1 - x0) / 2;
+
+        if (!d) {
+          ["wave-path-cap", "wave-path-cmd", "wave-path-pad", "wave-dim-thigh", "wave-dim-tlow", "wave-dim-period"]
+            .forEach((id) => setAttrCached(id, "d", ""));
+          ["wave-lbl-thigh", "wave-lbl-tlow", "wave-lbl-period", "wave-lbl-cmd"].forEach((id) => setTextContentCached(id, ""));
+          setTextContentCached("wave-status", "NO TELEMETRY");
+          setTextContentCached("wave-lbl-vhigh", `${state.vHigh.toFixed(2)} V`);
+          setTextContentCached("wave-lbl-vlow", `${state.vLow.toFixed(2)} V`);
+          setTextContentCached("wave-lbl-vavg", "");
+          setAttrCached("wave-line-vavg", "y1", "89");
+          setAttrCached("wave-line-vavg", "y2", "89");
+          ["wave-st-freq", "wave-st-period", "wave-st-thigh", "wave-st-tlow", "wave-st-duty",
+           "wave-st-levels", "wave-st-vavg", "wave-st-fluke", "wave-st-counts", "wave-st-edges"]
+            .forEach((id) => setTextContentCached(id, "---"));
+          setTextContentCached("wave-st-freq-sub", "captured");
+          setTextContentCached("wave-st-duty-sub", "Δ ---");
+          setTextContentCached("wave-st-fluke-sub", "fluke_v");
+          return;
+        }
+
+        const dutyCap = Math.min(100, Math.max(0, d.pwm_duty));
+        const dutyCmd = Math.min(100, Math.max(0, d.pwm_set));
+        const dcLine = isNoEdgesDC(d);
+        const hzCaptured = Number.isFinite(d.pwm_hz) && d.pwm_hz >= 0.5;
+        const hz = hzCaptured ? d.pwm_hz : WAVE.nominalHz;
+        const periodUs = 1e6 / hz;
+        const tHighUs = periodUs * dutyCap / 100;
+        const tLowUs = periodUs - tHighUs;
+
+        // Traces. The pad is the LEDC output with output_invert=1: pad low while B is high.
+        setAttrCached("wave-path-cap", "d", squareWavePath(dutyCap, yHi, yLo));
+        setAttrCached("wave-path-pad", "d", squareWavePath(dutyCap, padLo, padHi));
+        const showCmd = Math.abs(dutyCmd - dutyCap) > 0.5;
+        setAttrCached("wave-path-cmd", "d", showCmd ? squareWavePath(dutyCmd, yHi, yLo) : "");
+        setTextContentCached("wave-lbl-cmd", showCmd ? `commanded ${dutyCmd.toFixed(1)} % (dashed)` : "");
+
+        // Level references: V_high / V_low rows are fixed; V_avg sits at its proportional height.
+        setTextContentCached("wave-lbl-vhigh", `${state.vHigh.toFixed(2)} V`);
+        setTextContentCached("wave-lbl-vlow", `${state.vLow.toFixed(2)} V`);
+        const avgFrac = Math.min(1, Math.max(0, dutyCap / 100));
+        const yAvg = (yLo - (yLo - yHi) * avgFrac).toFixed(1);
+        setAttrCached("wave-line-vavg", "y1", yAvg);
+        setAttrCached("wave-line-vavg", "y2", yAvg);
+        setAttrCached("wave-lbl-vavg", "y", String(Number(yAvg) + 4));
+        setTextContentCached("wave-lbl-vavg", Number.isFinite(expVCap) ? `avg ${expVCap.toFixed(2)} V` : "");
+
+        // Dimensions on the first period.
+        const xHighEnd = x0 + periodPx * dutyCap / 100;
+        if (dcLine || dutyCap <= 0 || dutyCap >= 100) {
+          setAttrCached("wave-dim-thigh", "d", "");
+          setAttrCached("wave-dim-tlow", "d", "");
+          setAttrCached("wave-dim-period", "d", "");
+          setTextContentCached("wave-lbl-thigh", "");
+          setTextContentCached("wave-lbl-tlow", "");
+          setTextContentCached("wave-lbl-period", "");
+          setTextContentCached("wave-status", dutyCap >= 50 ? "NO EDGES: B HELD HIGH (DC)" : "NO EDGES: B HELD LOW (DC)");
+        } else {
+          setTextContentCached("wave-status", "");
+          setAttrCached("wave-dim-thigh", "d", dimensionPath(x0, xHighEnd, 34));
+          setAttrCached("wave-lbl-thigh", "x", ((x0 + xHighEnd) / 2).toFixed(1));
+          setTextContentCached("wave-lbl-thigh", `t_high ${fmtMicro(tHighUs)}`);
+          setAttrCached("wave-dim-tlow", "d", dimensionPath(xHighEnd, x0 + periodPx, 34));
+          setAttrCached("wave-lbl-tlow", "x", ((xHighEnd + x0 + periodPx) / 2).toFixed(1));
+          setTextContentCached("wave-lbl-tlow", `t_low ${fmtMicro(tLowUs)}`);
+          setAttrCached("wave-dim-period", "d", dimensionPath(x0, x0 + periodPx, 146));
+          setTextContentCached("wave-lbl-period", `T = ${fmtMicro(periodUs)}  (${hz.toFixed(hz >= 1000 ? 0 : 1)} Hz${hzCaptured ? "" : ", nominal"})`);
+        }
+
+        // Stats strip.
+        setTextContentCached("wave-st-freq", hzCaptured ? `${hz.toFixed(1)} Hz` : "0 Hz");
+        setTextContentCached("wave-st-freq-sub", hzCaptured ? "captured on GPIO16" : `no edges, nominal ${WAVE.nominalHz} Hz assumed`);
+        setTextContentCached("wave-st-period", fmtMicro(periodUs));
+        setTextContentCached("wave-st-period-sub", hzCaptured ? "1 / f" : "1 / f nominal");
+        setTextContentCached("wave-st-thigh", fmtMicro(tHighUs));
+        setTextContentCached("wave-st-thigh-sub", `GPIO16 low, ${dutyCap.toFixed(1)} % of T`);
+        setTextContentCached("wave-st-tlow", fmtMicro(tLowUs));
+        setTextContentCached("wave-st-tlow-sub", `GPIO16 high, ${(100 - dutyCap).toFixed(1)} % of T`);
+        setTextContentCached("wave-st-duty", `${dutyCap.toFixed(1)} / ${dutyCmd.toFixed(1)} %`);
+        const delta = dutyCap - dutyCmd;
+        setTextContentCached("wave-st-duty-sub", `Δ ${delta >= 0 ? "+" : ""}${delta.toFixed(2)} pt, source ${d.pwm_manual ? "MANUAL" : "POT"}`);
+        setTextContentCached("wave-st-levels", `${state.vHigh.toFixed(2)} / ${state.vLow.toFixed(2)} V`);
+        setTextContentCached("wave-st-vavg", Number.isFinite(expVCap) ? `${expVCap.toFixed(3)} V` : "---");
+        if (anaProv === "UNAVAILABLE" || !Number.isFinite(d.fluke_v)) {
+          setTextContentCached("wave-st-fluke", "---");
+          setTextContentCached("wave-st-fluke-sub", "fluke_v unavailable");
+        } else {
+          setTextContentCached("wave-st-fluke", `${d.fluke_v.toFixed(3)} V`);
+          setTextContentCached("wave-st-fluke-sub", anaProv === "ADC MEASURED" ? "ADS1115 A2, 128 SPS" : "calculated by firmware (no ADS1115)");
+        }
+        const counts = Math.round(dutyCmd * (1 << WAVE.dutyBits) / 100);
+        setTextContentCached("wave-st-counts", `${counts} / ${1 << WAVE.dutyBits}`);
+        setTextContentCached("wave-st-edges", hzCaptured ? String(Math.round(2 * hz * 0.1)) : "0");
+      }
+
+      /* =========================================================================
        * 4. RENDER COORDINATOR (requestAnimationFrame)
        * ========================================================================= */
       function scheduleRender() {
@@ -1839,6 +2195,9 @@
             document.getElementById("input-duty").value = d.pwm_set.toFixed(1);
           }
         }
+
+        // 6b. Static square-wave reference card
+        renderSquareWave(d, anaProv, expV_cap);
 
         // 7. Secondary Air Data Panel & /zero Gate
         const airPill = document.getElementById("pill-air-status");
